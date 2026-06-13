@@ -1,0 +1,12 @@
+# Normalize line endings
+* text=auto eol=lf
+
+# Treat these as binary
+*.png binary
+*.jpg binary
+*.pdf binary
+*.xlsx binary
+*.docx binary
+
+# Lockfile: keep as-is, mark generated for diffs
+pnpm-lock.yaml linguist-generated=true -diff

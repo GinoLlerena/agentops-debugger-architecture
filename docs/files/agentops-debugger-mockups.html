@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AgentOps Debugger — Mockups UX/UI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Source+Sans+3:wght@400;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --verde-fiscal:#0E5A47; --verde-tinta:#16241F; --papel:#F7F8F6; --superficie:#FFFFFF;
+  --azul-dato:#1D6FA3; --ambar:#B45309; --rojo:#B42318; --gris-ev:#5B6661;
+  --linea:#E2E6E2; --verde-suave:#E7F0EC;
+  --d1:#0E5A47; --d2:#1D6FA3; --d3:#5B8C5A; --d4:#7A6FA3;
+  --f-display:'Archivo',sans-serif; --f-body:'Source Sans 3',sans-serif; --f-mono:'IBM Plex Mono',monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--f-body);background:var(--papel);color:var(--verde-tinta);font-size:14px;line-height:1.45}
+h1,h2,h3,h4{font-family:var(--f-display)}
+button{font-family:var(--f-body);cursor:pointer}
+.mono{font-family:var(--f-mono)}
+
+/* ====== mockup switcher (not part of product UI) ====== */
+.switcher{position:fixed;top:10px;right:12px;z-index:99;background:var(--verde-tinta);border-radius:6px;padding:4px;display:flex;gap:4px}
+.switcher button{background:transparent;border:0;color:#cdd6d0;font-size:12px;padding:6px 12px;border-radius:4px}
+.switcher button.on{background:var(--verde-fiscal);color:#fff}
+.screen{display:none}.screen.on{display:flex}
+
+/* ====== app shell ====== */
+.shell{height:100vh;display:flex;overflow:hidden}
+.nav{width:64px;background:var(--verde-tinta);display:flex;flex-direction:column;align-items:center;padding:14px 0;gap:6px;flex-shrink:0}
+.logo{width:36px;height:36px;border-radius:6px;background:var(--verde-fiscal);color:#fff;display:flex;align-items:center;justify-content:center;font-family:var(--f-display);font-weight:700;font-size:15px;margin-bottom:14px}
+.nav a{width:40px;height:40px;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#9fb0a8;font-size:17px;text-decoration:none}
+.nav a.act{background:rgba(255,255,255,.1);color:#fff}
+.main{flex:1;display:flex;flex-direction:column;min-width:0}
+.topbar{height:52px;background:var(--superficie);border-bottom:1px solid var(--linea);display:flex;align-items:center;padding:0 18px;gap:12px;flex-shrink:0}
+.topbar h1{font-size:15px;font-weight:600}
+.status{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--gris-ev)}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--azul-dato);animation:pul 1.4s infinite}
+@keyframes pul{50%{opacity:.35}}
+.spacer{flex:1}
+.btn{border:1px solid var(--linea);background:var(--superficie);border-radius:6px;padding:7px 14px;font-size:13px;font-weight:600;color:var(--verde-tinta)}
+.btn.pri{background:var(--verde-fiscal);border-color:var(--verde-fiscal);color:#fff}
+.btn.sm{padding:4px 10px;font-size:12px;font-weight:600}
+
+/* ====== workspace split ====== */
+.split{flex:1;display:flex;min-height:0}
+.chat{width:430px;flex-shrink:0;border-right:1px solid var(--linea);display:flex;flex-direction:column;background:var(--superficie)}
+.thread{flex:1;overflow-y:auto;padding:18px 16px;display:flex;flex-direction:column;gap:14px}
+.composer{border-top:1px solid var(--linea);padding:12px 14px}
+.composer .box{border:1px solid var(--linea);border-radius:6px;padding:10px 12px;color:var(--gris-ev);display:flex;justify-content:space-between;align-items:center}
+.u-msg{align-self:flex-end;max-width:85%;background:var(--verde-suave);border-radius:8px 8px 2px 8px;padding:10px 12px}
+.card{border:1px solid var(--linea);border-radius:6px;background:var(--superficie);overflow:hidden}
+.card .hd{padding:9px 12px;border-bottom:1px solid var(--linea);display:flex;align-items:center;gap:8px}
+.eyebrow{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.08em;color:var(--gris-ev);text-transform:uppercase}
+.card .bd{padding:11px 12px}
+.plan-step{display:flex;gap:9px;padding:6px 0;font-size:13px}
+.plan-step .ic{width:20px;height:20px;border-radius:4px;background:var(--verde-suave);color:var(--verde-fiscal);display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0}
+.plan-step small{display:block;color:var(--gris-ev)}
+.reason{font-size:13px;color:#3c4944;background:var(--papel);border-left:3px solid var(--verde-fiscal);padding:8px 10px;border-radius:0 4px 4px 0;margin-bottom:8px}
+.actions{display:flex;gap:8px;padding:10px 12px;border-top:1px solid var(--linea)}
+
+/* checklist */
+.task{display:flex;gap:9px;padding:7px 0;align-items:flex-start;font-size:13px}
+.task .st{width:18px;height:18px;flex-shrink:0;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;margin-top:1px}
+.st.done{background:var(--verde-fiscal);color:#fff}
+.st.run{border:2px solid var(--azul-dato);border-top-color:transparent;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.st.wait{border:2px solid var(--linea)}
+.task .cap{color:var(--gris-ev);font-size:12px}
+.progressbar{height:4px;background:var(--linea);border-radius:2px;margin-top:5px;width:80%}
+.progressbar i{display:block;height:100%;width:62%;background:var(--azul-dato);border-radius:2px}
+
+/* evidence chips */
+.chip{font-family:var(--f-mono);font-size:10.5px;border:1px solid var(--verde-fiscal);color:var(--verde-fiscal);border-radius:4px;padding:0 4px;margin:0 1px;background:#fff;cursor:pointer}
+.chip.inf{border-style:dashed;color:var(--azul-dato);border-color:var(--azul-dato)}
+.sev{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;border-radius:4px;padding:1px 8px}
+.sev.alta{background:#FBE9E0;color:#C2410C}
+.sev.media{background:#FCEED8;color:var(--ambar)}
+.sev.critica{background:#FBE3E1;color:var(--rojo)}
+.sev.baja{background:#EDEFEE;color:var(--gris-ev)}
+.kstats{display:flex;gap:14px;font-size:13px;margin:6px 0}
+.kstats b{font-family:var(--f-mono);font-weight:500}
+
+/* ====== canvas ====== */
+.canvas{flex:1;display:flex;flex-direction:column;min-width:0;background:var(--papel)}
+.tabs{display:flex;gap:4px;padding:12px 18px 0;align-items:flex-end}
+.tab{font-family:var(--f-display);font-size:13px;font-weight:600;color:var(--gris-ev);background:#ECEFEC;border:1px solid var(--linea);border-bottom:0;padding:8px 18px 7px;border-radius:6px 6px 0 0;clip-path:polygon(0 100%,0 18%,8px 0,calc(100% - 8px) 0,100% 18%,100% 100%)}
+.tab.on{background:var(--superficie);color:var(--verde-tinta)}
+.tab .badge{font-family:var(--f-mono);font-size:10px;background:var(--verde-fiscal);color:#fff;border-radius:8px;padding:0 5px;margin-left:5px}
+.canvas-body{flex:1;overflow-y:auto;background:var(--superficie);border-top:1px solid var(--linea);padding:18px;display:flex;flex-direction:column;gap:14px}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.kpi{border:1px solid var(--linea);border-radius:6px;padding:11px 13px;background:var(--superficie)}
+.kpi .v{font-family:var(--f-mono);font-size:22px;font-weight:500;margin:2px 0}
+.kpi .l{font-size:12px;color:var(--gris-ev)}
+.kpi .d{font-size:11px;color:var(--gris-ev)}
+.kpi.warn .v{color:var(--ambar)}
+.chartcard{border:1px solid var(--linea);border-radius:6px;background:var(--superficie)}
+.chartcard .ch-hd{display:flex;align-items:center;padding:10px 13px;border-bottom:1px solid var(--linea)}
+.ch-hd h3{font-size:13.5px;font-weight:600}
+.attr{font-family:var(--f-mono);font-size:10px;color:var(--gris-ev);border:1px solid var(--linea);border-radius:4px;padding:1px 6px;cursor:pointer}
+.stamp{font-family:var(--f-mono);font-size:10.5px;color:var(--gris-ev)}
+.ch-bd{padding:13px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.legend{display:flex;gap:14px;font-size:11.5px;color:var(--gris-ev);margin-top:8px}
+.legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+
+/* timeline */
+.tl-row{display:flex;align-items:center;gap:0;padding:6px 0}
+.tl-ev{position:relative;text-align:center;flex:1}
+.tl-ev .pt{width:14px;height:14px;border-radius:50%;margin:0 auto 6px;border:3px solid #fff;box-shadow:0 0 0 1px var(--linea)}
+.tl-line{position:absolute;top:6px;left:50%;width:100%;height:2px;background:var(--linea);z-index:0}
+.tl-ev .pt{position:relative;z-index:1}
+.tl-ev .lb{font-size:11px;font-weight:600}
+.tl-ev .dt{font-family:var(--f-mono);font-size:10px;color:var(--gris-ev)}
+
+/* drawer */
+.drawer{width:300px;flex-shrink:0;border-left:1px solid var(--linea);background:var(--superficie);display:flex;flex-direction:column}
+.drawer .hd2{padding:12px 14px;border-bottom:1px solid var(--linea);display:flex;justify-content:space-between;align-items:center}
+.drawer .hd2 h3{font-size:13px}
+.ev-item{padding:12px 14px;border-bottom:1px solid var(--linea)}
+.ev-item .src{font-family:var(--f-mono);font-size:10.5px;color:var(--gris-ev);margin:6px 0 4px}
+.ev-item q{font-size:12.5px;color:#3c4944;font-style:italic}
+.ev-item a{font-size:12px;color:var(--azul-dato);text-decoration:none;font-weight:600}
+
+/* ====== dashboard ====== */
+.dash{flex:1;overflow-y:auto;padding:22px 26px;display:flex;flex-direction:column;gap:16px}
+.dash-hd h2{font-size:21px;font-weight:600}
+.dash-hd p{color:var(--gris-ev);font-size:13px}
+.search{border:1px solid var(--linea);background:var(--superficie);border-radius:6px;padding:10px 14px;color:var(--gris-ev);max-width:520px;margin-top:10px}
+.feed-item{display:flex;gap:10px;padding:11px 13px;border-bottom:1px solid var(--linea);align-items:flex-start;font-size:13px}
+.feed-item:last-child{border-bottom:0}
+.feed-item .go{margin-left:auto;color:var(--azul-dato);font-weight:600;font-size:12px;white-space:nowrap}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{font-family:var(--f-mono);font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--gris-ev);text-align:left;padding:9px 13px;border-bottom:1px solid var(--linea);font-weight:500}
+td{padding:10px 13px;border-bottom:1px solid var(--linea)}
+tr:last-child td{border-bottom:0}
+
+/* ====== report ====== */
+.report-wrap{flex:1;overflow-y:auto;background:var(--papel);padding:24px;display:flex;justify-content:center}
+.report{background:var(--superficie);border:1px solid var(--linea);border-radius:6px;max-width:860px;width:100%;padding:38px 46px}
+.report .rep-eyebrow{font-family:var(--f-mono);font-size:11px;color:var(--gris-ev);letter-spacing:.08em}
+.report h2{font-size:24px;margin:6px 0 2px}
+.report .meta{font-size:12.5px;color:var(--gris-ev);display:flex;gap:18px;margin:8px 0 4px;font-family:var(--f-mono)}
+.rule{border:0;border-top:2px solid var(--verde-tinta);margin:16px 0}
+.report h3{font-size:15px;margin:20px 0 8px;display:flex;align-items:center;gap:8px}
+.report h3 .n{font-family:var(--f-mono);font-size:11px;color:var(--gris-ev);font-weight:400}
+.report p{font-size:14px;margin-bottom:8px;color:#26332d}
+.finding{border:1px solid var(--linea);border-left:3px solid var(--verde-fiscal);border-radius:0 6px 6px 0;padding:10px 13px;margin:8px 0;font-size:13.5px}
+.finding .tag{font-family:var(--f-mono);font-size:10.5px;color:var(--gris-ev)}
+.disclaimer{background:var(--papel);border:1px solid var(--linea);border-radius:6px;padding:12px 14px;font-size:12px;color:var(--gris-ev);margin-top:22px}
+.warn-row{display:flex;gap:10px;align-items:flex-start;padding:8px 0;font-size:13.5px}
+</style>
+</head>
+<body>
+
+<div class="switcher">
+  <button class="on" onclick="go(0,this)">1 · Espacio de trabajo</button>
+  <button onclick="go(1,this)">2 · Panel</button>
+  <button onclick="go(2,this)">3 · Informe</button>
+</div>
+
+<!-- ============ SCREEN 1 : WORKSPACE ============ -->
+<div class="screen shell on">
+  <nav class="nav">
+    <div class="logo">AO</div>
+    <a href="#" title="Panel">▦</a>
+    <a href="#" class="act" title="Investigaciones">❡</a>
+    <a href="#" title="Explorador OEFA">▤</a>
+    <a href="#" title="Documentos">⌸</a>
+  </nav>
+  <div class="main">
+    <div class="topbar">
+      <h1>Antecedentes — Refinería La Pampilla S.A.A.</h1>
+      <span class="status"><span class="dot"></span> Investigando · paso 2 de 3</span>
+      <div class="spacer"></div>
+      <button class="btn">Trazabilidad</button>
+      <button class="btn pri">Generar informe</button>
+    </div>
+    <div class="split">
+
+      <!-- CHAT -->
+      <section class="chat">
+        <div class="thread">
+          <div class="u-msg">Genera un informe de antecedentes de Refinería La Pampilla con sus medidas correctivas desde 2019.</div>
+
+          <!-- PLAN CARD -->
+          <div class="card">
+            <div class="hd"><span class="eyebrow">Plan · Coordinador</span></div>
+            <div class="bd">
+              <div class="reason">La consulta pide historial sancionador y medidas correctivas. Combinaré los registros públicos de la API con las resoluciones cargadas para citar la parte resolutiva.</div>
+              <div class="plan-step"><span class="ic">▤</span><div>Agente de Datos OEFA<small>Buscar registros del administrado (RUC 20100123763)</small></div></div>
+              <div class="plan-step"><span class="ic">❡</span><div>Agente de Documentos<small>Recuperar resoluciones DFAI/TFA con medidas correctivas</small></div></div>
+              <div class="plan-step"><span class="ic">✦</span><div>Agente de Informes<small>Cruzar evidencia, detectar advertencias y redactar borrador</small></div></div>
+            </div>
+            <div class="actions"><button class="btn pri sm">▶ Ejecutar plan</button><button class="btn sm">✎ Ajustar</button></div>
+          </div>
+
+          <!-- TASK CHECKLIST -->
+          <div class="card">
+            <div class="hd"><span class="dot"></span><span style="font-weight:600;font-size:13px">Investigando…</span><span class="spacer"></span><span class="mono" style="font-size:11px;color:var(--gris-ev)">1 de 3 · 00:42</span></div>
+            <div class="bd">
+              <div class="task"><span class="st done">✓</span><div><b>Datos OEFA</b> · 124 registros, 8 con sanción firme<br><span class="cap">supervisiones-concluidas · resoluciones-emitidas</span></div></div>
+              <div class="task"><span class="st run"></span><div><b>Documentos</b><br><span class="cap">Leyendo Res. N.° 1245-2023-OEFA/DFAI — considerandos 12–18</span><div class="progressbar"><i></i></div></div></div>
+              <div class="task"><span class="st wait"></span><div style="color:var(--gris-ev)">Informe · en espera</div></div>
+            </div>
+            <div class="actions"><button class="btn sm">Ver detalle ⌄</button></div>
+          </div>
+
+          <!-- RESULT SUMMARY (previous task) -->
+          <div class="card">
+            <div class="hd"><span style="color:var(--verde-fiscal);font-weight:700">✔</span><span class="eyebrow">Resumen · tarea anterior</span></div>
+            <div class="bd">
+              <div class="kstats"><span><b>8</b> sanciones (2019–2025)</span><span><b>2</b> PAS en trámite</span></div>
+              <div class="kstats"><span>Exposición: <b>1,240 UIT</b> (S/ 6.6 M)</span><span class="sev alta">▲ Alta</span></div>
+              <p style="font-size:13px;margin-top:6px">Hallazgo principal: reincidencia en exceso de LMP en efluentes <span class="chip">E1</span><span class="chip">E2</span> con medida correctiva en verificación <span class="chip inf">E3</span>.</p>
+            </div>
+            <div class="actions"><button class="btn sm">Ver en el panel →</button><button class="btn sm">Fuentes (5)</button></div>
+          </div>
+        </div>
+        <div class="composer"><div class="box"><span>Pregunta sobre esta investigación…</span><span>📎 ↵</span></div></div>
+      </section>
+
+      <!-- CANVAS -->
+      <section class="canvas">
+        <div class="tabs">
+          <div class="tab on">Resumen</div>
+          <div class="tab">Datos OEFA <span class="badge">124</span></div>
+          <div class="tab">Documentos <span class="badge">3</span></div>
+          <div class="tab">Informe</div>
+        </div>
+        <div class="canvas-body">
+          <div class="kpis">
+            <div class="kpi"><div class="l">Sanciones firmes</div><div class="v">8</div><div class="d stamp">2019–2025</div></div>
+            <div class="kpi warn"><div class="l">PAS en trámite</div><div class="v">2</div><div class="d stamp">al 12/06/2026</div></div>
+            <div class="kpi"><div class="l">Exposición total</div><div class="v">1,240 UIT</div><div class="d stamp">S/ 6.6 M · UIT 2025</div></div>
+            <div class="kpi"><div class="l">Medidas correctivas</div><div class="v">5</div><div class="d stamp">3 cumplidas · 2 en verificación</div></div>
+          </div>
+
+          <!-- TIMELINE -->
+          <div class="chartcard">
+            <div class="ch-hd"><h3>Línea de tiempo procesal — Exp. 045-2023</h3><span class="spacer"></span><span class="stamp">Datos al 12/06/2026&nbsp;&nbsp;</span><span class="attr">⚙ Datos OEFA · 14:32</span></div>
+            <div class="ch-bd">
+              <div class="tl-row">
+                <div class="tl-ev"><div class="tl-line"></div><div class="pt" style="background:var(--d2)"></div><div class="lb">Supervisión</div><div class="dt">03/02/2023</div></div>
+                <div class="tl-ev"><div class="tl-line"></div><div class="pt" style="background:var(--d2)"></div><div class="lb">Inicio PAS</div><div class="dt">18/07/2023</div></div>
+                <div class="tl-ev"><div class="tl-line"></div><div class="pt" style="background:var(--d1)"></div><div class="lb">Res. DFAI <span class="chip">E1</span></div><div class="dt">02/11/2023</div></div>
+                <div class="tl-ev"><div class="tl-line"></div><div class="pt" style="background:#C2410C"></div><div class="lb">Apelación</div><div class="dt">28/11/2023</div></div>
+                <div class="tl-ev"><div class="pt" style="background:var(--d1)"></div><div class="lb">Res. TFA <span class="chip">E2</span></div><div class="dt">15/04/2024</div></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid2">
+            <!-- BAR CHART -->
+            <div class="chartcard">
+              <div class="ch-hd"><h3>¿Cuántas sanciones por año? (UIT)</h3><span class="spacer"></span><span class="attr">⚙</span></div>
+              <div class="ch-bd">
+                <svg viewBox="0 0 320 150" width="100%">
+                  <line x1="28" y1="125" x2="312" y2="125" stroke="#E2E6E2"/>
+                  <line x1="28" y1="75" x2="312" y2="75" stroke="#E2E6E2" stroke-dasharray="3 3"/>
+                  <line x1="28" y1="25" x2="312" y2="25" stroke="#E2E6E2" stroke-dasharray="3 3"/>
+                  <text x="24" y="128" font-size="9" fill="#5B6661" text-anchor="end" font-family="IBM Plex Mono">0</text>
+                  <text x="24" y="78" font-size="9" fill="#5B6661" text-anchor="end" font-family="IBM Plex Mono">200</text>
+                  <text x="24" y="28" font-size="9" fill="#5B6661" text-anchor="end" font-family="IBM Plex Mono">400</text>
+                  <g fill="#0E5A47">
+                    <rect x="42"  y="95" width="26" height="30" rx="2"/>
+                    <rect x="82"  y="70" width="26" height="55" rx="2"/>
+                    <rect x="122" y="110" width="26" height="15" rx="2"/>
+                    <rect x="162" y="45" width="26" height="80" rx="2"/>
+                    <rect x="202" y="85" width="26" height="40" rx="2"/>
+                    <rect x="242" y="30" width="26" height="95" rx="2"/>
+                    <rect x="282" y="100" width="26" height="25" rx="2"/>
+                  </g>
+                  <g font-size="9" fill="#5B6661" font-family="IBM Plex Mono" text-anchor="middle">
+                    <text x="55" y="138">2019</text><text x="95" y="138">2020</text><text x="135" y="138">2021</text>
+                    <text x="175" y="138">2022</text><text x="215" y="138">2023</text><text x="255" y="138">2024</text><text x="295" y="138">2025</text>
+                  </g>
+                </svg>
+                <div class="legend"><span class="stamp">Fuente: API OEFA · resoluciones-emitidas · Datos al 12/06/2026</span></div>
+              </div>
+            </div>
+            <!-- HORIZONTAL BARS -->
+            <div class="chartcard">
+              <div class="ch-hd"><h3>Multas por tipo de infracción</h3><span class="spacer"></span><span class="attr">⚙</span></div>
+              <div class="ch-bd">
+                <svg viewBox="0 0 320 150" width="100%">
+                  <g font-size="9.5" fill="#26332d" font-family="Source Sans 3">
+                    <text x="0" y="22">Exceso de LMP efluentes</text>
+                    <text x="0" y="54">Incumplir IGA</text>
+                    <text x="0" y="86">No informar emergencia</text>
+                    <text x="0" y="118">Medida correctiva</text>
+                  </g>
+                  <g fill="#0E5A47">
+                    <rect x="135" y="12" width="170" height="13" rx="2"/>
+                    <rect x="135" y="44" width="112" height="13" rx="2"/>
+                    <rect x="135" y="76" width="64" height="13" rx="2"/>
+                    <rect x="135" y="108" width="36" height="13" rx="2"/>
+                  </g>
+                  <g font-size="9" fill="#5B6661" font-family="IBM Plex Mono">
+                    <text x="309" y="22">520</text><text x="251" y="54">340</text><text x="203" y="86">195</text><text x="175" y="118">110</text>
+                  </g>
+                </svg>
+                <div class="legend"><span class="stamp">UIT acumuladas 2019–2025 · 8 resoluciones</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- EVIDENCE DRAWER -->
+      <aside class="drawer">
+        <div class="hd2"><h3>Evidencia</h3><span class="stamp">5 fuentes</span></div>
+        <div class="ev-item">
+          <span class="chip">E1</span> <span class="sev alta" style="font-size:11px">Evidencia directa</span>
+          <div class="src">Res. N.° 1245-2023-OEFA/DFAI · 02/11/2023 · p. 14</div>
+          <q>«…declarar la existencia de responsabilidad administrativa por exceder los LMP de efluentes…»</q><br>
+          <a href="#">Abrir documento original (p. 14) →</a>
+        </div>
+        <div class="ev-item">
+          <span class="chip">E2</span> <span class="sev alta" style="font-size:11px">Evidencia directa</span>
+          <div class="src">Res. N.° 0312-2024-OEFA/TFA-SE · 15/04/2024 · p. 6</div>
+          <q>«…confirmar la resolución apelada en todos sus extremos…»</q><br>
+          <a href="#">Abrir documento original (p. 6) →</a>
+        </div>
+        <div class="ev-item">
+          <span class="chip inf">E3</span> <span class="sev baja" style="font-size:11px">Inferencia</span>
+          <div class="src">API OEFA · medidas-correctivas · 12/06/2026</div>
+          <q>Estado «en verificación» en 2 registros del mismo expediente.</q><br>
+          <a href="#">Ver registros →</a>
+        </div>
+      </aside>
+    </div>
+  </div>
+</div>
+
+<!-- ============ SCREEN 2 : DASHBOARD ============ -->
+<div class="screen shell">
+  <nav class="nav">
+    <div class="logo">AO</div>
+    <a href="#" class="act">▦</a><a href="#">❡</a><a href="#">▤</a><a href="#">⌸</a>
+  </nav>
+  <div class="main">
+    <div class="topbar"><h1>Panel</h1><div class="spacer"></div><button class="btn pri">+ Nueva investigación</button></div>
+    <div class="dash">
+      <div class="dash-hd">
+        <h2>Buenos días, Mariana</h2>
+        <p>3 alertas nuevas en tu cartera desde tu última visita.</p>
+        <div class="search">🔍 Buscar administrado, informe o sesión…</div>
+      </div>
+      <div class="kpis">
+        <div class="kpi"><div class="l">Procesos abiertos</div><div class="v">14</div><div class="d stamp">en 9 administrados</div></div>
+        <div class="kpi"><div class="l">Nuevas resoluciones (jun)</div><div class="v">6</div><div class="d stamp">+2 vs. mayo</div></div>
+        <div class="kpi"><div class="l">Exposición de cartera</div><div class="v">4,830 UIT</div><div class="d stamp">S/ 25.8 M · UIT 2026</div></div>
+        <div class="kpi warn"><div class="l">Alertas activas</div><div class="v">3</div><div class="d stamp">1 crítica</div></div>
+      </div>
+      <div class="grid2">
+        <div class="chartcard">
+          <div class="ch-hd"><h3>Evolución de supervisiones — cartera</h3><span class="spacer"></span><span class="stamp">Datos al 12/06/2026&nbsp;</span><span class="attr">⚙</span></div>
+          <div class="ch-bd">
+            <svg viewBox="0 0 320 130" width="100%">
+              <line x1="20" y1="110" x2="310" y2="110" stroke="#E2E6E2"/>
+              <line x1="20" y1="60" x2="310" y2="60" stroke="#E2E6E2" stroke-dasharray="3 3"/>
+              <polyline points="25,92 70,80 115,86 160,62 205,70 250,44 295,52" fill="none" stroke="#0E5A47" stroke-width="2.5" stroke-linejoin="round"/>
+              <polyline points="25,100 70,96 115,90 160,84 205,88 250,78 295,72" fill="none" stroke="#1D6FA3" stroke-width="2" stroke-dasharray="5 4"/>
+              <g font-size="9" fill="#5B6661" font-family="IBM Plex Mono" text-anchor="middle">
+                <text x="25" y="124">E</text><text x="70" y="124">F</text><text x="115" y="124">M</text><text x="160" y="124">A</text><text x="205" y="124">M</text><text x="250" y="124">J</text>
+              </g>
+            </svg>
+            <div class="legend"><span><i style="background:#0E5A47"></i>Supervisiones</span><span><i style="background:#1D6FA3"></i>Inicios de PAS</span></div>
+          </div>
+        </div>
+        <div class="chartcard">
+          <div class="ch-hd"><h3>Severidad de cartera</h3><span class="spacer"></span><span class="attr">⚙</span></div>
+          <div class="ch-bd">
+            <svg viewBox="0 0 320 46" width="100%">
+              <rect x="0"   y="8" width="118" height="26" fill="#5B6661" rx="3"/>
+              <rect x="121" y="8" width="96"  height="26" fill="#B45309"/>
+              <rect x="220" y="8" width="64"  height="26" fill="#C2410C"/>
+              <rect x="287" y="8" width="33"  height="26" fill="#B42318" rx="3"/>
+              <g font-size="10" fill="#fff" font-family="IBM Plex Mono">
+                <text x="8" y="25">Baja 11</text><text x="129" y="25">Media 9</text><text x="228" y="25">Alta 6</text><text x="291" y="25">3</text>
+              </g>
+            </svg>
+            <div class="legend"><span>● Baja</span><span>▲ Media</span><span>▲ Alta</span><span>! Crítica</span><span class="stamp" style="margin-left:auto">29 administrados</span></div>
+            <h3 style="font-size:13px;margin:16px 0 8px;font-family:var(--f-display)">Alertas recientes</h3>
+            <div class="feed-item"><span class="sev critica">! Crítica</span><div>Nueva Res. TFA confirma multa de 980 UIT — Minera Cerro Norte <span class="chip">E1</span></div><a class="go" href="#">Investigar →</a></div>
+            <div class="feed-item"><span class="sev media">▲ Media</span><div>3 denuncias SINADA nuevas en Loreto, sector hidrocarburos</div><a class="go" href="#">Investigar →</a></div>
+            <div class="feed-item"><span class="sev baja">● Info</span><div>Dataset «supervisiones-concluidas» actualizado (12/06)</div><a class="go" href="#">Ver →</a></div>
+          </div>
+        </div>
+      </div>
+      <div class="chartcard">
+        <div class="ch-hd"><h3>Investigaciones recientes</h3><span class="spacer"></span><button class="btn sm">Ver todas</button></div>
+        <table>
+          <tr><th>Investigación</th><th>Administrado</th><th>Estado</th><th>Severidad</th><th>Actualizada</th></tr>
+          <tr><td>Antecedentes y medidas correctivas</td><td>Refinería La Pampilla S.A.A.</td><td><span class="dot" style="display:inline-block"></span> En curso</td><td><span class="sev alta">▲ Alta</span></td><td class="mono" style="font-size:12px">hace 2 min</td></tr>
+          <tr><td>Precedentes exceso LMP — pesca</td><td>—</td><td>Completada</td><td><span class="sev media">▲ Media</span></td><td class="mono" style="font-size:12px">10/06/2026</td></tr>
+          <tr><td>Due diligence proveedor</td><td>Agroexport Valle Verde S.A.C.</td><td>Completada</td><td><span class="sev baja">● Baja</span></td><td class="mono" style="font-size:12px">06/06/2026</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ SCREEN 3 : REPORT ============ -->
+<div class="screen shell">
+  <nav class="nav">
+    <div class="logo">AO</div>
+    <a href="#">▦</a><a href="#" class="act">❡</a><a href="#">▤</a><a href="#">⌸</a>
+  </nav>
+  <div class="main">
+    <div class="topbar"><h1>Informe #042</h1><span class="status">Solo lectura · v1.2</span><div class="spacer"></div><button class="btn">Trazabilidad</button><button class="btn">Exportar ▾</button><button class="btn pri">Aprobar informe</button></div>
+    <div class="report-wrap">
+      <div class="report">
+        <div class="rep-eyebrow">INFORME DE ANTECEDENTES AMBIENTALES · EXPEDIENTE DE INVESTIGACIÓN #042</div>
+        <h2>Refinería La Pampilla S.A.A.</h2>
+        <div class="meta"><span>RUC 20100123763</span><span>Período: 2019–2025</span><span>Emitido: 12/06/2026</span><span>Agente v2.3 · índice 0610</span></div>
+        <hr class="rule">
+
+        <h3><span class="n">01</span> Resumen ejecutivo</h3>
+        <p>Entre 2019 y 2025 el administrado registra <b>8 sanciones firmes</b> por un total de <b>1,240 UIT (S/ 6.6 M, UIT 2025)</b> y mantiene <b>2 PAS en trámite</b>. El patrón predominante es el exceso de Límites Máximos Permisibles en efluentes, con reincidencia verificada. Severidad estimada de la cartera de riesgo: <span class="sev alta">▲ Alta</span>.</p>
+
+        <h3><span class="n">02</span> Hallazgos</h3>
+        <div class="finding">La DFAI declaró responsabilidad administrativa por exceder los LMP de efluentes en el punto de control EF-02. <span class="chip">E1</span><br><span class="tag">Res. N.° 1245-2023-OEFA/DFAI · 02/11/2023 · p. 14 · Evidencia directa</span></div>
+        <div class="finding">El TFA confirmó la sanción en segunda instancia; la resolución quedó firme. <span class="chip">E2</span><br><span class="tag">Res. N.° 0312-2024-OEFA/TFA-SE · 15/04/2024 · p. 6 · Evidencia directa</span></div>
+        <div class="finding">Dos medidas correctivas del mismo expediente figuran «en verificación» a la fecha de consulta. <span class="chip inf">E3</span><br><span class="tag">API OEFA · medidas-correctivas · consultado 12/06/2026 · Inferencia</span></div>
+
+        <h3><span class="n">03</span> Advertencias</h3>
+        <div class="warn-row"><span class="sev alta">▲ Alta</span><div>Reincidencia en la misma conducta infractora (2021, 2023): agravante probable en futuros PAS. <span class="chip">E1</span><span class="chip">E2</span></div></div>
+        <div class="warn-row"><span class="sev media">▲ Media</span><div>Una resolución citada en medios aún es apelable; no debe tratarse como firme. </div></div>
+
+        <h3><span class="n">04</span> Recomendaciones</h3>
+        <p>Se sugiere priorizar la verificación del cumplimiento de las medidas correctivas en curso y documentar las acciones de adecuación de efluentes antes de la próxima supervisión regular. Estas recomendaciones se basan en la evidencia citada y deben ser revisadas por asesoría legal.</p>
+
+        <h3><span class="n">05</span> Fuentes y metodología</h3>
+        <p class="mono" style="font-size:12px;color:var(--gris-ev)">5 documentos · 3 consultas API (supervisiones-concluidas, resoluciones-emitidas, medidas-correctivas) · datos al 12/06/2026 · verificación de afirmaciones: 14 comprobadas, 1 omitida por falta de evidencia.</p>
+
+        <div class="disclaimer"><b>Descargo de responsabilidad.</b> Este informe se genera a partir de datos públicos de OEFA y documentos cargados. No constituye una determinación oficial de OEFA, opinión legal ni certificación de cumplimiento. Las advertencias son indicadores analíticos generados por el sistema y deben ser revisadas por un profesional calificado. / <i>This report is generated from public OEFA data and uploaded documents. It is not an official OEFA determination, legal opinion, or compliance certification.</i></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function go(i,btn){
+  document.querySelectorAll('.screen').forEach((s,k)=>s.classList.toggle('on',k===i));
+  document.querySelectorAll('.switcher button').forEach(b=>b.classList.toggle('on',b===btn));
+}
+</script>
+</body>
+</html>
