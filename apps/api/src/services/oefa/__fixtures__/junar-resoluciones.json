@@ -1,0 +1,56 @@
+{
+  "result": [
+    {
+      "RUC": "20100110663",
+      "Administrado": "Refinería La Pampilla S.A.A.",
+      "Unidad Fiscalizable": "Refinería La Pampilla",
+      "Departamento": "Callao",
+      "Provincia": "Callao",
+      "Sector": "Hidrocarburos",
+      "Hechos Imputados": "Exceso de LMP en efluentes",
+      "Normativa Incumplida": "D.S. 003-2010-MINAM",
+      "Resolución de Multa": "Resolución N.° 1245-2023-OEFA/DFAI",
+      "Tipo de Sanción": "Multa",
+      "Multa (UIT)": "320",
+      "Multa (Soles)": "1,584,000",
+      "Reincidencia": "Sí",
+      "Estado": "Firme",
+      "Fecha Acto Administrativo": "12/03/2023"
+    },
+    {
+      "RUC": "20543210981",
+      "Administrado": "Minera Los Andes S.A.",
+      "Unidad Fiscalizable": "U.M. Cerro Verde",
+      "Departamento": "Arequipa",
+      "Sector": "Minería",
+      "Hechos Imputados": "Manejo inadecuado de residuos peligrosos",
+      "Normativa Incumplida": "Ley 27314",
+      "Resolución de Multa": "Resolución N.° 0322-2022-OEFA/DFAI",
+      "Tipo de Sanción": "Multa",
+      "Multa (UIT)": "150",
+      "Multa (Soles)": "690,000",
+      "Reincidencia": "No",
+      "Estado": "En apelación",
+      "Fecha Acto Administrativo": "05/08/2022"
+    },
+    {
+      "RUC": "20100110663",
+      "Administrado": "Refinería La Pampilla S.A.A.",
+      "Unidad Fiscalizable": "Refinería La Pampilla",
+      "Departamento": "Callao",
+      "Sector": "Hidrocarburos",
+      "Hechos Imputados": "Incumplimiento de instrumento de gestión ambiental",
+      "Normativa Incumplida": "Ley 28611",
+      "Resolución de Multa": "Resolución N.° 0890-2021-OEFA/DFAI",
+      "Tipo de Sanción": "Multa",
+      "Multa (UIT)": "80",
+      "Multa (Soles)": "352,000",
+      "Reincidencia": "Sí",
+      "Estado": "Firme",
+      "Fecha Acto Administrativo": "20/11/2021"
+    }
+  ],
+  "count": 3,
+  "limit": 50,
+  "offset": 0
+}
