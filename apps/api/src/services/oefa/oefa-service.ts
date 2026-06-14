@@ -7,17 +7,8 @@ import {
 } from './datasets.js';
 import { cacheKey, InMemoryOefaCache, type OefaCache } from './oefa-cache.js';
 import { JunarClient } from './junar-client.js';
-import { normalizeRows } from './oefa-normalizer.js';
-
-/** lowercase + strip accents + collapse whitespace, for fuzzy text matching. */
-function norm(s: string): string {
-  return s
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
-    .replace(/\s+/g, ' ')
-    .trim();
-}
+import { normalizeRowsSafe } from './oefa-normalizer.js';
+import { normalizeText as norm } from '../util/text.js';
 
 function parseYear(...dates: Array<string | undefined>): number | undefined {
   for (const d of dates) {
@@ -68,13 +59,14 @@ export class JunarRecordSource implements OefaRecordSource {
     if (dataset.type !== 'datastream') {
       throw new Error(`El dataset "${dataset.id}" es un dashboard; no expone filas.`);
     }
-    const { rows, total, partial } = await this.client.getDatastreamRows(dataset.guid, {
+    const { rows, total, partial, columns } = await this.client.getDatastreamRows(dataset.guid, {
       maxRows: opts.maxRows ?? 500,
     });
-    const records = normalizeRows(rows, dataset, {
+    const { records } = normalizeRowsSafe(rows, dataset, {
       fetchedAt: this.clock().toISOString(),
       coverage: DATASET_COVERAGE[datasetKey],
       fromCache: false,
+      columns, // header row threaded for array-of-arrays datastreams
     });
     return { records, total, partial };
   }

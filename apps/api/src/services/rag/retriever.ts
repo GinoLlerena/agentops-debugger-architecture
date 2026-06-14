@@ -78,8 +78,17 @@ export class RagService {
 
     if (!this.embedder || this.vectorChunks.length === 0) return lexical.slice(0, limit);
 
-    // Hybrid: blend normalized lexical + vector cosine scores by chunk id.
-    const [queryEmbedding] = await this.embedder.embed([query]);
+    // Hybrid: blend normalized lexical + vector cosine scores by chunk id. If the
+    // embedder fails at request time (network/quota), degrade to lexical rather
+    // than failing retrieval — lexical is the always-available floor.
+    let queryEmbedding: number[] | undefined;
+    try {
+      [queryEmbedding] = await this.embedder.embed([query]);
+    } catch {
+      return lexical.slice(0, limit);
+    }
+    if (!queryEmbedding) return lexical.slice(0, limit);
+
     const vector: RetrievalResult[] = this.vectorChunks
       .filter((c) => chunkMatchesFilter(c, opts.filter) && c.embedding)
       .map((c) => ({ chunk: c, score: cosineSimilarity(queryEmbedding!, c.embedding!) }))

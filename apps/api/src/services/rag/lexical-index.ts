@@ -1,3 +1,4 @@
+import { foldAccents } from '../util/text.js';
 import type { DocChunk, RetrievalFilter, RetrievalResult } from './types.js';
 
 /** Small Spanish stopword set — enough to keep BM25 scores meaningful. */
@@ -8,10 +9,7 @@ const STOPWORDS = new Set([
 ]);
 
 export function tokenize(text: string): string[] {
-  return text
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
+  return foldAccents(text)
     .split(/[^a-z0-9]+/)
     .filter((t) => t.length >= 2 && !STOPWORDS.has(t));
 }
@@ -40,7 +38,7 @@ export class LexicalIndex {
   private readonly termFreqs: Array<Map<string, number>> = [];
   private readonly docFreq = new Map<string, number>();
   private readonly lengths: number[] = [];
-  private avgLen = 0;
+  private totalLen = 0;
 
   private static readonly K1 = 1.5;
   private static readonly B = 0.75;
@@ -54,9 +52,12 @@ export class LexicalIndex {
       this.chunks.push(chunk);
       this.termFreqs.push(tf);
       this.lengths.push(tokens.length);
+      this.totalLen += tokens.length; // running sum → avgLen is O(1), not O(n) per add
     }
-    const total = this.lengths.reduce((a, b) => a + b, 0);
-    this.avgLen = this.chunks.length ? total / this.chunks.length : 0;
+  }
+
+  private get avgLen(): number {
+    return this.chunks.length ? this.totalLen / this.chunks.length : 0;
   }
 
   get size(): number {
@@ -69,6 +70,14 @@ export class LexicalIndex {
     const N = this.chunks.length;
     if (N === 0 || qTerms.length === 0) return [];
 
+    // idf depends only on the term and N, not the chunk — compute once per term.
+    const idf = new Map<string, number>();
+    for (const term of qTerms) {
+      const df = this.docFreq.get(term) ?? 0;
+      idf.set(term, Math.log(1 + (N - df + 0.5) / (df + 0.5)));
+    }
+
+    const avgLen = this.avgLen || 1;
     const scored: RetrievalResult[] = [];
     for (let i = 0; i < N; i++) {
       const chunk = this.chunks[i]!;
@@ -79,10 +88,8 @@ export class LexicalIndex {
       for (const term of qTerms) {
         const f = tf.get(term);
         if (!f) continue;
-        const df = this.docFreq.get(term) ?? 0;
-        const idf = Math.log(1 + (N - df + 0.5) / (df + 0.5));
-        const denom = f + LexicalIndex.K1 * (1 - LexicalIndex.B + (LexicalIndex.B * len) / (this.avgLen || 1));
-        score += idf * ((f * (LexicalIndex.K1 + 1)) / denom);
+        const denom = f + LexicalIndex.K1 * (1 - LexicalIndex.B + (LexicalIndex.B * len) / avgLen);
+        score += idf.get(term)! * ((f * (LexicalIndex.K1 + 1)) / denom);
       }
       if (score > 0) scored.push({ chunk, score });
     }

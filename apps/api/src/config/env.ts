@@ -59,7 +59,10 @@ export function getEnv(source: Record<string, string | undefined> = process.env)
 
   const cleaned: Record<string, string | undefined> = {};
   for (const [k, v] of Object.entries(source)) {
-    cleaned[k] = v === '' ? undefined : v;
+    // Treat blank/whitespace-only values as unset, so a blank .env placeholder
+    // never reads as a configured secret (would otherwise build a client with a
+    // junk credential instead of degrading gracefully).
+    cleaned[k] = v == null || v.trim() === '' ? undefined : v;
   }
 
   const parsed = EnvSchema.parse(cleaned);

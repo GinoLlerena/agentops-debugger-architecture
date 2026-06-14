@@ -20,7 +20,9 @@ export async function loadSeedCorpus(): Promise<RagDocument[]> {
   const docs: RagDocument[] = [];
   for (const relPath of SEED_DOC_PATHS) {
     const text = await readFile(join(SEED_DIR, relPath), 'utf8');
-    docs.push({ id: docIdFromPath(relPath), text, metadata: { source: relPath } });
+    // Use `filePath` (not `source`) so the authored frontmatter `source`
+    // (the human-readable institution) survives the metadata merge.
+    docs.push({ id: docIdFromPath(relPath), text, metadata: { filePath: relPath } });
   }
   return docs;
 }

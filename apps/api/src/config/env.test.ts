@@ -17,12 +17,12 @@ describe('env config', () => {
     expect(env.OEFA_API_BASE_URL).toContain('datosabiertos.oefa.gob.pe');
   });
 
-  it('treats empty strings as unset (blank placeholders are not configured)', () => {
+  it('treats empty and whitespace-only strings as unset (blank placeholders are not configured)', () => {
     const env = getEnv({ DASHSCOPE_API_KEY: '', OEFA_API_KEY: '   ' });
-    expect(isQwenConfigured(env)).toBe(false);
-    // a whitespace-only value is non-empty by the cleaner, but min(1) keeps it a
-    // string — still "present"; treat only "" as unset by design.
     expect(env.DASHSCOPE_API_KEY).toBeUndefined();
+    expect(env.OEFA_API_KEY).toBeUndefined(); // whitespace-only → unset, not a junk key
+    expect(isQwenConfigured(env)).toBe(false);
+    expect(isOefaConfigured(env)).toBe(false);
   });
 
   it('coerces PORT and rejects a malformed base URL', () => {

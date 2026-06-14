@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { OefaRecord } from '@agentops/shared';
 import { getDataset } from './datasets.js';
-import { normalizeResolutionStatus, normalizeRows } from './oefa-normalizer.js';
+import { normalizeResolutionStatus, normalizeRows, normalizeRowsSafe } from './oefa-normalizer.js';
 import fixture from './__fixtures__/junar-resoluciones.json' with { type: 'json' };
 
 const dataset = getDataset('resolucionesMultaFirmes');
@@ -49,5 +49,47 @@ describe('oefa normalizer', () => {
     expect(normalizeResolutionStatus('Archivado')).toBe('archivada');
     expect(normalizeResolutionStatus('cualquier cosa')).toBe('desconocido');
     expect(normalizeResolutionStatus(undefined)).toBe('desconocido');
+  });
+
+  it('does NOT classify a negated status ("no firme") as firme', () => {
+    expect(normalizeResolutionStatus('No firme')).not.toBe('firme');
+    expect(normalizeResolutionStatus('Aún no firme')).not.toBe('firme');
+    expect(normalizeResolutionStatus('Apelada, no firme')).toBe('apelada');
+  });
+});
+
+describe('normalizeRowsSafe robustness', () => {
+  const dataset2 = getDataset('resolucionesMultaFirmes');
+  const opts = { fetchedAt: '2026-06-13T12:00:00.000Z' };
+
+  it('skips a malformed row (negative fine) instead of aborting the whole batch', () => {
+    const rows = [
+      { Administrado: 'Empresa Buena S.A.', 'Multa (UIT)': '100', Estado: 'Firme' },
+      { Administrado: 'Empresa Mala S.A.', 'Multa (UIT)': '-50', Estado: 'Firme' }, // negative → rejected
+      { Administrado: 'Empresa Otra S.A.', 'Multa (UIT)': '30', Estado: 'Firme' },
+    ];
+    const { records, skipped } = normalizeRowsSafe(rows, dataset2, opts);
+    expect(records).toHaveLength(2);
+    expect(skipped).toBe(1);
+    expect(records.map((r) => r.administrado)).toEqual(['Empresa Buena S.A.', 'Empresa Otra S.A.']);
+  });
+
+  it('parses a comma-decimal fine without inflating it 10x', () => {
+    const { records } = normalizeRowsSafe(
+      [{ Administrado: 'X', 'Multa (UIT)': '12,5', Estado: 'Firme' }],
+      dataset2,
+      opts,
+    );
+    expect(records[0]!.fineAmountUit).toBe(12.5);
+  });
+
+  it('maps array-of-arrays rows when columns are threaded', () => {
+    const { records } = normalizeRowsSafe(
+      [['20100110663', 'Refinería La Pampilla S.A.A.', 'Firme']],
+      dataset2,
+      { ...opts, columns: ['RUC', 'Administrado', 'Estado'] },
+    );
+    expect(records[0]!.administrado).toBe('Refinería La Pampilla S.A.A.');
+    expect(records[0]!.ruc).toBe('20100110663');
   });
 });

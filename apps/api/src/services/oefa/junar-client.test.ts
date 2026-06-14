@@ -80,6 +80,34 @@ describe('JunarClient', () => {
     expect(partial).toBe(true);
   });
 
+  it('labels results partial when the cap is hit and the API omits `count`', async () => {
+    // Full pages, no `count` field → total unknown. Must assume more remain.
+    const fetchImpl = vi.fn(async (url: string | URL | Request) => {
+      const u = new URL(String(url));
+      const limit = Number(u.searchParams.get('limit') ?? '50');
+      const rows = Array.from({ length: limit }, (_, i) => ({ Administrado: `E${i}` }));
+      return jsonRes({ result: rows }); // no count/limit/offset
+    });
+    const client = new JunarClient(env, { fetchImpl, sleep: noSleep });
+    const { rows, partial } = await client.getDatastreamRows('G', { pageSize: 2, maxRows: 4 });
+    expect(rows).toHaveLength(4);
+    expect(partial).toBe(true);
+  });
+
+  it('threads declared `fields` columns for array-of-arrays data', async () => {
+    const fetchImpl = vi.fn(async () =>
+      jsonRes({
+        fields: ['RUC', 'Administrado'],
+        result: [['20100110663', 'La Pampilla']],
+        count: 1,
+      }),
+    );
+    const client = new JunarClient(env, { fetchImpl, sleep: noSleep });
+    const { rows, columns } = await client.getDatastreamRows('G');
+    expect(columns).toEqual(['RUC', 'Administrado']);
+    expect(rows).toHaveLength(1);
+  });
+
   it('retries on a 500 then succeeds', async () => {
     const fetchImpl = vi
       .fn()

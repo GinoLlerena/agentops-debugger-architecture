@@ -20,6 +20,8 @@ export interface JunarPage {
   count?: number;
   limit?: number;
   offset?: number;
+  /** Column headers, when the envelope provides them (for array-of-arrays rows). */
+  columns?: string[];
 }
 
 export class JunarError extends Error {
@@ -49,14 +51,23 @@ export function redactAuthKey(url: string): string {
   return url.replace(/(auth_key=)[^&]*/i, '$1***');
 }
 
+const asStringArray = (v: unknown): string[] | undefined =>
+  Array.isArray(v) && v.every((x) => typeof x === 'string') ? (v as string[]) : undefined;
+
 /** Pull the row array out of a Junar `data.json` envelope, tolerating shapes. */
 export function extractRows(json: unknown): JunarPage {
   if (json && typeof json === 'object') {
     const obj = json as Record<string, unknown>;
     const result = obj.result ?? obj.data ?? obj.rows;
+    // Column headers, when the envelope declares them (`fields`/`columns`), let
+    // the normalizer map array-of-arrays rows. We rely on explicit metadata only:
+    // guessing a header from an all-strings first row is unsafe (it would drop a
+    // real data row when every column happens to be a string).
+    const columns = asStringArray(obj.fields) ?? asStringArray(obj.columns);
     if (Array.isArray(result)) {
       return {
         rows: result,
+        columns,
         count: typeof obj.count === 'number' ? obj.count : undefined,
         limit: typeof obj.limit === 'number' ? obj.limit : undefined,
         offset: typeof obj.offset === 'number' ? obj.offset : undefined,
@@ -109,20 +120,26 @@ export class JunarClient {
   async getDatastreamRows(
     guid: string,
     { pageSize = 50, maxRows = 500 }: { pageSize?: number; maxRows?: number } = {},
-  ): Promise<{ rows: unknown[]; total?: number; partial: boolean }> {
+  ): Promise<{ rows: unknown[]; total?: number; partial: boolean; columns?: string[] }> {
     const rows: unknown[] = [];
     let offset = 0;
     let total: number | undefined;
+    let columns: string[] | undefined;
     for (;;) {
       const limit = Math.min(pageSize, maxRows - rows.length);
-      if (limit <= 0) return { rows, total, partial: true };
+      if (limit <= 0) return { rows, total, partial: true, columns };
       const page = await this.getDatastreamPage(guid, { limit, offset });
       if (page.count != null) total = page.count;
+      if (page.columns) columns = page.columns;
       rows.push(...page.rows);
-      if (page.rows.length < limit) return { rows, total, partial: false }; // exhausted
+      if (page.rows.length < limit) return { rows, total, partial: false, columns }; // exhausted
       offset += page.rows.length;
-      if (total != null && offset >= total) return { rows, total, partial: false };
-      if (rows.length >= maxRows) return { rows, total, partial: total != null && offset < total };
+      if (total != null && offset >= total) return { rows, total, partial: false, columns };
+      // Cap hit: results are partial unless we provably consumed the whole set.
+      // With an unknown total we must assume more rows remain (FR-12).
+      if (rows.length >= maxRows) {
+        return { rows, total, partial: total == null || offset < total, columns };
+      }
     }
   }
 

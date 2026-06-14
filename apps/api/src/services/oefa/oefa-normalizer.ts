@@ -1,22 +1,13 @@
 import { OefaRecord, type OefaDatasetConfig, type ResolutionStatus } from '@agentops/shared';
+import { canonKey, parseLocaleNumber } from '../util/text.js';
 
 /**
  * Maps raw Junar rows onto the normalized `OefaRecord` shape. Field names vary by
  * datastream and are an open item (VERIFY B-2), so lookups are **alias-based and
  * accent/case/space-insensitive**, using the RUIAS data dictionary as the column
  * reference. Object rows are supported directly; array rows need a column header
- * list (Junar sometimes returns header-as-first-row).
+ * list (Junar sometimes returns header-as-first-row), threaded via `columns`.
  */
-
-/** Canonical key: lowercase, strip accents, non-alphanumerics → underscore. */
-function canonKey(s: string): string {
-  return s
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '') // strip combining diacritics
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '');
-}
 
 const ALIASES = {
   administrado: ['administrado', 'administrado_infractor', 'infractor', 'razon_social', 'nombre', 'empresa', 'nombre_administrado'],
@@ -74,10 +65,8 @@ function pickString(row: CanonRow, aliases: readonly string[]): string | undefin
 function pickNumber(row: CanonRow, aliases: readonly string[]): number | undefined {
   const s = pickString(row, aliases);
   if (s == null) return undefined;
-  // strip currency symbols and thousands separators (spaces, commas)
-  const cleaned = s.replace(/[^\d.,-]/g, '').replace(/,/g, '');
-  const n = Number(cleaned);
-  return Number.isFinite(n) ? n : undefined;
+  // locale-aware: infer whether ','/'.' is the decimal vs thousands separator.
+  return parseLocaleNumber(s);
 }
 
 function pickBoolean(row: CanonRow, aliases: readonly string[]): boolean | undefined {
@@ -92,11 +81,15 @@ function pickBoolean(row: CanonRow, aliases: readonly string[]): boolean | undef
 export function normalizeResolutionStatus(raw: string | undefined): ResolutionStatus {
   if (!raw) return 'desconocido';
   const v = canonKey(raw);
-  if (v.includes('firme') || v.includes('consentid')) return 'firme';
+  // Check non-firm statuses first, and require firmness to not be negated
+  // ("no firme" / "aún no firme" must not classify as firme).
   if (v.includes('apel')) return 'apelada';
   if (v.includes('anulad')) return 'anulada';
   if (v.includes('archiv')) return 'archivada';
   if (v.includes('proceso') || v.includes('tramite')) return 'en_proceso';
+  const negated = /(^|_)no(_|$)/.test(v) || v.includes('no_firme');
+  if (!negated && (v.includes('firme') || v.includes('consentid'))) return 'firme';
+  if (v.includes('firme') || v.includes('consentid')) return 'en_proceso'; // "no firme" → still in process
   return 'desconocido';
 }
 
@@ -147,10 +140,38 @@ export function normalizeRow(
   });
 }
 
+export interface NormalizeRowsResult {
+  records: OefaRecord[];
+  /** Count of rows that failed to normalize (skipped, not thrown). */
+  skipped: number;
+}
+
+/**
+ * Normalize a batch of rows. A row that fails validation is **skipped**, not
+ * thrown — dirty source data must not abort the whole dataset (FR-14 posture).
+ * Use {@link normalizeRows} for the records-only convenience form.
+ */
+export function normalizeRowsSafe(
+  rows: unknown[],
+  dataset: OefaDatasetConfig,
+  opts: { fetchedAt: string; coverage?: string; fromCache?: boolean; columns?: string[] },
+): NormalizeRowsResult {
+  const records: OefaRecord[] = [];
+  let skipped = 0;
+  rows.forEach((row, i) => {
+    try {
+      records.push(normalizeRow(row, dataset, i, opts));
+    } catch {
+      skipped++; // malformed row (e.g. negative fine) — skip, keep the rest
+    }
+  });
+  return { records, skipped };
+}
+
 export function normalizeRows(
   rows: unknown[],
   dataset: OefaDatasetConfig,
   opts: { fetchedAt: string; coverage?: string; fromCache?: boolean; columns?: string[] },
 ): OefaRecord[] {
-  return rows.map((row, i) => normalizeRow(row, dataset, i, opts));
+  return normalizeRowsSafe(rows, dataset, opts).records;
 }

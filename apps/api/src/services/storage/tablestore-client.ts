@@ -60,12 +60,16 @@ export class TablestoreDocumentStore implements DocumentStore {
     collection: string,
     opts: { prefix?: string; limit?: number } = {},
   ): Promise<StoredDoc<T>[]> {
+    // Bound BOTH ends by the prefix so `limit` counts only matching rows
+    // (otherwise getRange would fill the limit with rows past the prefix that the
+    // startsWith filter then discards, silently under-returning).
     const startId = opts.prefix ?? TableStore.INF_MIN;
+    const endId = opts.prefix ? `${opts.prefix}￿` : TableStore.INF_MAX;
     const res = await this.client.getRange({
       tableName: this.tableName,
       direction: TableStore.Direction.FORWARD,
       inclusiveStartPrimaryKey: [{ pk: collection }, { id: startId }],
-      exclusiveEndPrimaryKey: [{ pk: collection }, { id: TableStore.INF_MAX }],
+      exclusiveEndPrimaryKey: [{ pk: collection }, { id: endId }],
       limit: opts.limit,
     });
     const rows = (res?.rows ?? []) as Array<{
