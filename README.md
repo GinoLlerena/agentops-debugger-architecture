@@ -6,7 +6,16 @@
 
 ## Status
 
-🚧 In development. **Phase 0 (scaffold + shared contracts)** complete. See [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md) for the full phased plan and [`docs/VERIFY.md`](docs/VERIFY.md) for open items.
+🚧 In development.
+
+- **Phase 0** — scaffold + shared zod contracts ✅
+- **Phase 1** — backend service foundations ✅ (Qwen provider, OEFA Junar client + normalizer + tools, storage ports with in-memory ⇄ Tablestore/OSS, RAG chunker + hybrid retriever, offline seed data)
+- **Next: Phase 2** — Mastra orchestration (Coordinator workflow + specialist agents).
+
+See [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md) for the full phased plan and [`docs/VERIFY.md`](docs/VERIFY.md) for open items.
+
+### RAG path
+Retrieval is **hybrid**: a BM25 lexical index always runs; when `QWEN_EMBEDDING_MODEL` is configured it is blended with Qwen Cloud vector similarity. With no embeddings model in credits, the **lexical path is the offline-capable default** (decision D4). All service tests run with **no network and no API keys** — external clients (Qwen, Junar, Tablestore, OSS) sit behind interfaces with in-memory/fixture-backed implementations.
 
 ## Stack
 

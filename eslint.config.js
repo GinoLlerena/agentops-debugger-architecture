@@ -16,4 +16,11 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    // Node build scripts (ESM): allow Node globals like console/process.
+    files: ['**/scripts/**/*.mjs', '**/*.config.{js,mjs,ts}'],
+    languageOptions: {
+      globals: { console: 'readonly', process: 'readonly' },
+    },
+  },
 );
