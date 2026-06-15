@@ -38,10 +38,9 @@ export class QwenEmbedder implements Embedder {
     const provider = createOpenAI({
       apiKey: env.DASHSCOPE_API_KEY,
       baseURL: env.DASHSCOPE_BASE_URL,
-      compatibility: 'compatible',
     });
     this.model = env.QWEN_EMBEDDING_MODEL;
-    this.embeddingModel = provider.embedding(this.model);
+    this.embeddingModel = provider.textEmbeddingModel(this.model);
   }
 
   async embed(texts: string[]): Promise<number[][]> {

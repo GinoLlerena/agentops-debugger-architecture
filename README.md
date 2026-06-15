@@ -10,7 +10,8 @@
 
 - **Phase 0** — scaffold + shared zod contracts ✅
 - **Phase 1** — backend service foundations ✅ (Qwen provider, OEFA Junar client + normalizer + tools, storage ports with in-memory ⇄ Tablestore/OSS, RAG chunker + hybrid retriever, offline seed data)
-- **Next: Phase 2** — Mastra orchestration (Coordinator workflow + specialist agents).
+- **Phase 2** — orchestration core ✅ (manifest-driven routing, the Coordinator engine with evidence guardrail + HITL suspend/resume + MAX_TASK_STEPS, and the Mastra specialist agents + planner over Qwen)
+- **Next: Phase 3** — REST + streaming `/agent/*` endpoints, persistence, and the first end-to-end vertical slice.
 
 See [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md) for the full phased plan and [`docs/VERIFY.md`](docs/VERIFY.md) for open items.
 
@@ -20,7 +21,7 @@ Retrieval is **hybrid**: a BM25 lexical index always runs; when `QWEN_EMBEDDING_
 ## Stack
 
 - **Frontend** (`apps/web`): React + Vite + TanStack Router/Query + Tailwind + shadcn + Recharts + CopilotKit (chat transport).
-- **Backend** (`apps/api`): Node/TypeScript (Fastify/Hono) + **Mastra** orchestration (Coordinator workflow + specialist agents) + REST and streaming `/agent/*` endpoints.
+- **Backend** (`apps/api`): Node/TypeScript (Fastify/Hono) + **Mastra** agents (built on the Vercel AI SDK v5 → Qwen Cloud) behind a framework-agnostic, dependency-injected Coordinator engine + REST and streaming `/agent/*` endpoints. The orchestration core is testable with mocked agents (no live LLM); the manifest registry makes routing declarative data.
 - **Contracts** (`packages/shared`): zod schemas shared across boundaries (the single source of truth).
 - **Models:** Qwen Cloud via DashScope (OpenAI-compatible).
 - **Persistence:** Alibaba Cloud Tablestore (state, sessions, reports, ledger, cache, chunks, snapshots) + OSS (documents, exports).
