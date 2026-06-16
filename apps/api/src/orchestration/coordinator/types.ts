@@ -6,8 +6,11 @@ import type {
   DomainTaskResult,
   NormalizedUserRequest,
   OrchestratorState,
+  Resumption,
   StreamEvent,
 } from '@agentops/shared';
+
+export type { Resumption };
 
 /** Streamed progress sink — the same typed envelope powers live UI + the trace. */
 export type OnProgress = (event: StreamEvent) => void | Promise<void>;
@@ -58,11 +61,6 @@ export interface CoordinatorDeps {
 export interface RunOptions {
   onProgress?: OnProgress;
 }
-
-/** What the user supplies to lift a suspension. */
-export type Resumption =
-  | { type: 'approval'; approved: boolean }
-  | { type: 'clarification'; answer: string };
 
 export interface Coordinator {
   /** Start a fresh turn (creates or extends session state). */

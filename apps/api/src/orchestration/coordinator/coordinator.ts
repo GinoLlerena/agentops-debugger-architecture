@@ -271,7 +271,13 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
         { taskId: task.taskId, agentId: result.agentId },
       );
     }
-    const cleaned: DomainTaskResult = { ...result, findings: kept };
+    // Stamp every evidence item with its producing agent so consumers (the canvas
+    // tabs, the trace) can attribute it without relying on id-prefix conventions.
+    const stampedEvidence = result.evidence.map((e) => ({
+      ...e,
+      producedByAgentId: e.producedByAgentId ?? result.agentId,
+    }));
+    const cleaned: DomainTaskResult = { ...result, findings: kept, evidence: stampedEvidence };
 
     // merge artifacts + evidence
     const artifacts = { ...state.artifacts };

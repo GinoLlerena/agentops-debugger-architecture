@@ -93,6 +93,17 @@ export const StreamEvent = z.discriminatedUnion('type', [
 ]);
 export type StreamEvent = z.infer<typeof StreamEvent>;
 
+/**
+ * What the user supplies to lift a suspension (the resume endpoint body's
+ * `resumption` field). Shared so the server, the orchestrator, and the web client
+ * agree on one contract.
+ */
+export const Resumption = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('approval'), approved: z.boolean() }),
+  z.object({ type: z.literal('clarification'), answer: z.string() }),
+]);
+export type Resumption = z.infer<typeof Resumption>;
+
 /** Discriminator literals, handy for exhaustive switches on the client. */
 export const STREAM_EVENT_TYPES = [
   'plan',

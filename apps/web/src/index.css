@@ -1,0 +1,37 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-papel text-verde-tinta font-body text-base antialiased;
+  }
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply font-display;
+  }
+  /* Honor reduced-motion globally (UX §8.4). */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+  /* Visible focus ring (azul-dato), 2px offset (UX §10). */
+  :focus-visible {
+    @apply outline-none ring-2 ring-azul-dato ring-offset-2;
+  }
+}
+
+@layer utilities {
+  .mono {
+    @apply font-mono;
+  }
+  .eyebrow {
+    @apply font-mono text-2xs uppercase tracking-wider text-gris-ev;
+  }
+}
