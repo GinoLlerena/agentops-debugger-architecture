@@ -12,10 +12,12 @@
   "dependencies": {
     "@agentops/shared": "workspace:*",
     "@ai-sdk/openai": "^2.0.107",
+    "@hono/node-server": "^1.13.7",
     "@mastra/core": "^1.42.0",
     "ai": "^5.0.202",
     "ali-oss": "^6.21.0",
     "dotenv": "^16.4.7",
+    "hono": "^4.6.14",
     "tablestore": "^5.5.5",
     "zod": "^3.25.76"
   },

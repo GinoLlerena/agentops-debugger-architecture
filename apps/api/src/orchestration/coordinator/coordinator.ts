@@ -403,10 +403,12 @@ function errMsg(err: unknown): string {
 }
 
 function defaultSummary(state: OrchestratorState): string {
+  const summaries = state.completedTasks
+    .filter((t) => t.status === 'completed')
+    .map((t) => t.summary.trim())
+    .filter(Boolean);
+  if (summaries.length > 0) return summaries.join(' ');
   const n = state.completedTasks.length;
   if (n === 0) return 'No se realizaron acciones.';
-  const failed = state.completedTasks.filter((t) => t.status === 'failed').length;
-  return failed > 0
-    ? `Se completaron ${n - failed} de ${n} tareas; ${failed} con error.`
-    : `Se completaron ${n} tareas.`;
+  return 'No encontré evidencia en las fuentes consultadas.';
 }

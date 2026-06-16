@@ -11,7 +11,20 @@
 - **Phase 0** — scaffold + shared zod contracts ✅
 - **Phase 1** — backend service foundations ✅ (Qwen provider, OEFA Junar client + normalizer + tools, storage ports with in-memory ⇄ Tablestore/OSS, RAG chunker + hybrid retriever, offline seed data)
 - **Phase 2** — orchestration core ✅ (manifest-driven routing, the Coordinator engine with evidence guardrail + HITL suspend/resume + MAX_TASK_STEPS, and the Mastra specialist agents + planner over Qwen)
-- **Next: Phase 3** — REST + streaming `/agent/*` endpoints, persistence, and the first end-to-end vertical slice.
+- **Phase 3** — API + persistence + first vertical slice ✅ (Hono server: streaming `/agent/*` with the typed event envelope, REST + `/trace/:sessionId`, durable suspend/resume, **Flow B grounded Q&A end-to-end**)
+- **Next: Phase 4** — frontend workspace (chat + canvas, trace sheet, dashboard).
+
+### Run the API
+
+```bash
+pnpm --filter @agentops/api build && node apps/api/dist/index.js
+# → AgentOps Debugger API · modo offline · http://localhost:8787
+curl -s http://localhost:8787/health
+curl -N -X POST http://localhost:8787/agent/ask -H 'content-type: application/json' \
+  -d '{"text":"Antecedentes del administrado con RUC 20543210981","sessionId":"demo"}'
+```
+
+With no keys it runs in **offline mode** (seed records, lexical RAG, no-LLM agents) — the full Flow B streams cited results. Set `DASHSCOPE_API_KEY` (+ `OEFA_API_KEY`) to switch to **live mode** (Mastra agents + Qwen, real OEFA API).
 
 See [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md) for the full phased plan and [`docs/VERIFY.md`](docs/VERIFY.md) for open items.
 
