@@ -30,3 +30,7 @@ coverage/
 # vite
 apps/web/dist/
 .vite/
+
+# verification artifacts
+.playwright-mcp/
+/*.png

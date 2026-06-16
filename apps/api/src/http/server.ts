@@ -1,5 +1,6 @@
 import {
   NormalizedUserRequest,
+  Resumption as ResumptionSchema,
   type ExecutionStatus,
   type OrchestratorState,
   type StreamEvent,
@@ -9,13 +10,8 @@ import { streamSSE } from 'hono/streaming';
 import { z, ZodError } from 'zod';
 import { OEFA_DATASETS } from '../services/oefa/datasets.js';
 import { RecordFilterSchema } from '../services/oefa/oefa-service.js';
-import type { OnProgress, Resumption } from '../orchestration/coordinator/types.js';
+import type { OnProgress } from '../orchestration/coordinator/types.js';
 import type { AppDeps } from './deps.js';
-
-const ResumptionSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('approval'), approved: z.boolean() }),
-  z.object({ type: z.literal('clarification'), answer: z.string() }),
-]);
 
 /** Query-string year params arrive as strings; treat present-but-empty as absent. */
 const QueryYear = z.preprocess(

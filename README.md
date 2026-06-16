@@ -12,7 +12,17 @@
 - **Phase 1** — backend service foundations ✅ (Qwen provider, OEFA Junar client + normalizer + tools, storage ports with in-memory ⇄ Tablestore/OSS, RAG chunker + hybrid retriever, offline seed data)
 - **Phase 2** — orchestration core ✅ (manifest-driven routing, the Coordinator engine with evidence guardrail + HITL suspend/resume + MAX_TASK_STEPS, and the Mastra specialist agents + planner over Qwen)
 - **Phase 3** — API + persistence + first vertical slice ✅ (Hono server: streaming `/agent/*` with the typed event envelope, REST + `/trace/:sessionId`, durable suspend/resume, **Flow B grounded Q&A end-to-end**)
-- **Next: Phase 4** — frontend workspace (chat + canvas, trace sheet, dashboard).
+- **Phase 4** — frontend workspace ✅ (React/Vite + TanStack Router/Query + Tailwind: the Workspace chat + canvas, evidence chips + drawer, the Trazabilidad trace sheet, and the dashboard — bound to the streaming `/agent/*` + REST)
+- **Next: Phase 5** — reports/exports, Recharts visualizations, eval metric, Alibaba Cloud deploy.
+
+### Run the web app (against the offline API)
+
+```bash
+# terminal 1 — backend (offline, no keys)
+pnpm --filter @agentops/api build && node apps/api/dist/index.js
+# terminal 2 — frontend (proxies /agent, /oefa, /trace … to :8787)
+pnpm --filter @agentops/web dev   # → http://localhost:5173
+```
 
 ### Run the API
 
@@ -33,7 +43,7 @@ Retrieval is **hybrid**: a BM25 lexical index always runs; when `QWEN_EMBEDDING_
 
 ## Stack
 
-- **Frontend** (`apps/web`): React + Vite + TanStack Router/Query + Tailwind + shadcn + Recharts + CopilotKit (chat transport).
+- **Frontend** (`apps/web`): React + Vite + TanStack Router/Query + Tailwind. A typed SSE client folds the streaming event envelope into chat state (custom client rather than CopilotKit, since `/agent/*` speaks our own typed contract). Recharts visualizations land in Phase 5.
 - **Backend** (`apps/api`): Node/TypeScript (Fastify/Hono) + **Mastra** agents (built on the Vercel AI SDK v5 → Qwen Cloud) behind a framework-agnostic, dependency-injected Coordinator engine + REST and streaming `/agent/*` endpoints. The orchestration core is testable with mocked agents (no live LLM); the manifest registry makes routing declarative data.
 - **Contracts** (`packages/shared`): zod schemas shared across boundaries (the single source of truth).
 - **Models:** Qwen Cloud via DashScope (OpenAI-compatible).
