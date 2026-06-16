@@ -6,6 +6,7 @@ import {
   type LedgerEventType,
   type NormalizedUserRequest,
   type OrchestratorState,
+  type UiAction,
 } from '@agentops/shared';
 import {
   AGENT_MANIFESTS,
@@ -319,12 +320,24 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
     const evidence = collectAllEvidence(state);
     const text = state.finalResponseDraft ?? defaultSummary(state);
     state.finalResponseDraft = text;
+
+    // Surface chart_data artifacts to the canvas + drive the UI to show them
+    // (structured generative UI: the agent asks the canvas to render/switch).
+    const charts = Object.values(state.artifacts).filter((a) => a.kind === 'chart_data');
+    const uiActions: UiAction[] = charts.map((c) => ({
+      action: 'render_chart',
+      chartId: c.id,
+      artifactId: c.id,
+    }));
+    if (charts.length > 0) uiActions.push({ action: 'open_tab', tab: 'datos' });
+
     void emit(onProgress, {
       type: 'result',
       payload: {
         text,
-        uiActions: [],
+        uiActions,
         evidence,
+        artifacts: charts,
         resultSummary: {
           completedTasks: state.completedTasks.length,
           evidenceCount: evidence.length,

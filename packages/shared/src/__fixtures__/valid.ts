@@ -232,3 +232,18 @@ export const validStreamEventDone = {
   type: 'done',
   payload: { sessionId: 'session-1', status: 'completed' },
 };
+
+export const validChartSpec = {
+  id: 'chart-sanciones-anio',
+  kind: 'bar',
+  title: '¿Cuántas sanciones por año?',
+  unit: 'registros',
+  series: [
+    { label: '2023', value: 3 },
+    { label: '2024', value: 5 },
+  ],
+  source: 'API OEFA · RESOL-CON-MULTA-FIRME',
+  coverage: '2019-2025',
+  asOf: '13/06/2026',
+  producedByAgentId: 'data-agent',
+};

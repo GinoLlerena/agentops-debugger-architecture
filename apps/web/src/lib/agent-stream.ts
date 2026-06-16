@@ -1,9 +1,12 @@
 import {
   StreamEvent,
+  type ChartSpec,
   type EvidenceItem,
   type ExecutionStatus,
   type DomainTaskPacket,
 } from '@agentops/shared';
+
+export type CanvasTab = 'resumen' | 'datos' | 'documentos' | 'informe';
 
 /**
  * Client-side model of a chat turn, folded from the typed SSE event envelope.
@@ -48,9 +51,18 @@ export interface ChatState {
   messages: ChatMessage[];
   /** Evidence accumulated across the turn — feeds the canvas + evidence drawer. */
   evidence: EvidenceItem[];
+  /** Charts the agent asked the canvas to render (chart_data artifacts). */
+  charts: ChartSpec[];
+  /** Canvas tab the agent requested via an open_tab uiAction (agent-driven UI). */
+  requestedTab?: CanvasTab;
 }
 
-export const initialChatState: ChatState = { status: 'idle', messages: [], evidence: [] };
+export const initialChatState: ChatState = {
+  status: 'idle',
+  messages: [],
+  evidence: [],
+  charts: [],
+};
 
 let seq = 0;
 const nextId = (): string => `m${++seq}`;
@@ -151,9 +163,19 @@ export function reduceEvent(state: ChatState, event: StreamEvent): ChatState {
       // Accumulate evidence across the turn, de-duped by id (the canvas reads it).
       const byId = new Map(state.evidence.map((e) => [e.id, e]));
       for (const e of event.payload.evidence) if (!byId.has(e.id)) byId.set(e.id, e);
+      // Collect chart_data artifacts the agent streamed.
+      const chartById = new Map(state.charts.map((c) => [c.id, c]));
+      for (const a of event.payload.artifacts) {
+        if (a.kind === 'chart_data') chartById.set(a.id, a.data as ChartSpec);
+      }
+      // Apply open_tab uiActions (the agent driving the canvas).
+      let requestedTab = state.requestedTab;
+      for (const ua of event.payload.uiActions) if (ua.action === 'open_tab') requestedTab = ua.tab;
       return {
         ...state,
         evidence: [...byId.values()],
+        charts: [...chartById.values()],
+        requestedTab,
         messages: [
           ...state.messages,
           {

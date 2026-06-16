@@ -8,6 +8,7 @@ import type {
 } from '@agentops/shared';
 import type { OefaService } from '../../services/oefa/oefa-service.js';
 import type { RagService } from '../../services/rag/index.js';
+import { buildOefaCharts } from '../../services/charts/oefa-charts.js';
 import { foldAccents } from '../../services/util/text.js';
 import { AGENT_IDS } from '../manifests/registry.js';
 import type { Planner, PlanResult, SpecialistAgent } from '../coordinator/types.js';
@@ -137,7 +138,7 @@ export function createOfflineDataAgent(oefa: OefaService): SpecialistAgent {
           confidence: 'directa',
         },
       ];
-      const artifact: ArtifactRecord = {
+      const recordSet: ArtifactRecord = {
         id: `records:${entity.ruc ?? entity.administrado}`,
         kind: 'record_set',
         producedByAgentId: AGENT_IDS.data,
@@ -145,12 +146,27 @@ export function createOfflineDataAgent(oefa: OefaService): SpecialistAgent {
         summary: `${records.length} registros de ${entity.administrado}`,
         data: { records, stats },
       };
+      // Chart specs → chart_data artifacts the canvas renders (agent-driven UI).
+      const chartArtifacts: ArtifactRecord[] = buildOefaCharts(records, {
+        source: `API OEFA · ${base.datasetId}`,
+        coverage: base.coverage,
+        asOf: base.fetchedAt,
+        producedByAgentId: AGENT_IDS.data,
+        entityLabel: entity.administrado,
+      }).map((chart) => ({
+        id: chart.id,
+        kind: 'chart_data',
+        producedByAgentId: AGENT_IDS.data,
+        createdAt: base.fetchedAt,
+        summary: chart.title,
+        data: chart,
+      }));
       return mkResult(
         AGENT_IDS.data,
         task,
         'completed',
         `${stats.totalRecords} registros de ${entity.administrado} (${stats.firmCount} firmes).`,
-        { evidence, findings, artifacts: [artifact] },
+        { evidence, findings, artifacts: [recordSet, ...chartArtifacts] },
       );
     },
   };
