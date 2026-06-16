@@ -43,12 +43,10 @@ export function createQwenProvider(env: Env = getEnv()): QwenProvider {
     );
   }
 
+  // DashScope is OpenAI-compatible; point the OpenAI provider at its base URL.
   const provider: OpenAIProvider = createOpenAI({
     apiKey: env.DASHSCOPE_API_KEY,
     baseURL: env.DASHSCOPE_BASE_URL,
-    // DashScope is OpenAI-compatible but not OpenAI; "compatible" mode avoids
-    // sending OpenAI-only fields the gateway may reject.
-    compatibility: 'compatible',
   });
 
   const chatModelId = env.QWEN_MODEL;
@@ -77,7 +75,7 @@ export async function qwenSmokeTest(
   const { text } = await generateText({
     model: qwen.getChatModel(),
     prompt,
-    maxTokens: 32,
+    maxOutputTokens: 32,
   });
   return text.trim();
 }
