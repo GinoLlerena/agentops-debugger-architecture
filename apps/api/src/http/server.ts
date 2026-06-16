@@ -1,8 +1,14 @@
-import { NormalizedUserRequest, type OrchestratorState } from '@agentops/shared';
+import {
+  NormalizedUserRequest,
+  type ExecutionStatus,
+  type OrchestratorState,
+  type StreamEvent,
+} from '@agentops/shared';
 import { Hono, type Context } from 'hono';
 import { streamSSE } from 'hono/streaming';
-import { z } from 'zod';
+import { z, ZodError } from 'zod';
 import { OEFA_DATASETS } from '../services/oefa/datasets.js';
+import { RecordFilterSchema } from '../services/oefa/oefa-service.js';
 import type { OnProgress, Resumption } from '../orchestration/coordinator/types.js';
 import type { AppDeps } from './deps.js';
 
@@ -11,65 +17,69 @@ const ResumptionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('clarification'), answer: z.string() }),
 ]);
 
-const OefaFilterSchema = z.object({
-  administrado: z.string().optional(),
-  ruc: z.string().optional(),
-  sector: z.string().optional(),
-  region: z.string().optional(),
-  yearFrom: z.coerce.number().int().optional(),
-  yearTo: z.coerce.number().int().optional(),
-  infraction: z.string().optional(),
-});
+/** Query-string year params arrive as strings; treat present-but-empty as absent. */
+const QueryYear = z.preprocess(
+  (v) => (v === '' || v == null ? undefined : v),
+  z.coerce.number().int().optional(),
+);
+
+/** Reuse the shared filter contract; only override the year fields for coercion. */
+const OefaSearchSchema = RecordFilterSchema.extend({ yearFrom: QueryYear, yearTo: QueryYear });
 
 /**
  * Build the HTTP app over injected {@link AppDeps}. Dependency injection keeps the
  * server fully testable offline via `app.request(...)`. The streaming `/agent/*`
- * endpoints emit the typed event envelope (architecture §10); REST serves the
- * canvas/dashboard and the `/trace` debugger feed.
+ * endpoints emit the typed event envelope (architecture §10), always terminating
+ * with a typed `done` frame; REST serves the canvas/dashboard and `/trace`.
  */
 export function createServer(deps: AppDeps): Hono {
   const app = new Hono();
 
   app.onError((err, c) => {
+    if (err instanceof ZodError) return c.json({ error: 'Solicitud inválida', issues: err.issues }, 400);
     return c.json({ error: err instanceof Error ? err.message : 'Error interno' }, 500);
   });
 
   app.get('/health', (c) => c.json({ status: 'ok', mode: deps.mode }));
 
-  // ── streaming agent endpoints (Flow A/B share machinery) ──────────────────
-  const runAgent = (kind: 'start' | 'resume') =>
-    async (c: Context) => {
-      let state: OrchestratorState;
-      let resumption: Resumption | undefined;
-      let request: NormalizedUserRequest | undefined;
-
-      if (kind === 'start') {
-        request = NormalizedUserRequest.parse(await c.req.json());
-      } else {
-        const body = z
-          .object({ sessionId: z.string(), resumption: ResumptionSchema })
-          .parse(await c.req.json());
-        const loaded = await deps.sessionStore.loadState(body.sessionId);
-        if (!loaded) return c.json({ error: 'Sesión no encontrada' }, 404);
-        state = loaded;
-        resumption = body.resumption;
+  /**
+   * Run a coordinator turn and stream it. Validation/precondition failures return
+   * a normal JSON 4xx *before* streaming. Once streaming, the run is decoupled
+   * from client consumption: write failures (disconnect) are swallowed so the run
+   * still completes and persists, and any coordinator/persistence error is
+   * surfaced as a typed `error` event. Every stream ends with a typed `done`.
+   */
+  const runAgent = (kind: 'start' | 'resume') => async (c: Context) => {
+    if (kind === 'start') {
+      const request = NormalizedUserRequest.parse(await c.req.json());
+      if (request.sessionId) {
+        const existing = await deps.sessionStore.loadState(request.sessionId);
+        if (existing?.executionStatus === 'waiting') {
+          return c.json(
+            { error: 'La sesión está en espera de tu respuesta. Usa /agent/*/resume.' },
+            409,
+          );
+        }
       }
+      return streamTurn(c, deps, (onProgress) => deps.coordinator.start(request, { onProgress }));
+    }
 
-      return streamSSE(c, async (stream) => {
-        const onProgress: OnProgress = async (event) => {
-          await stream.writeSSE({ event: event.type, data: JSON.stringify(event) });
-        };
-        const next =
-          kind === 'start'
-            ? await deps.coordinator.start(request!, { onProgress })
-            : await deps.coordinator.resume(state, resumption!, { onProgress });
-        await deps.sessionStore.saveState(next);
-        await stream.writeSSE({
-          event: 'done',
-          data: JSON.stringify({ sessionId: next.sessionId, status: next.executionStatus }),
-        });
-      });
-    };
+    const body = z
+      .object({ sessionId: z.string(), resumption: ResumptionSchema })
+      .parse(await c.req.json());
+    const state = await deps.sessionStore.loadState(body.sessionId);
+    if (!state) return c.json({ error: 'Sesión no encontrada' }, 404);
+    const interrupt = state.interruptState;
+    if (interrupt && interrupt.reason !== body.resumption.type) {
+      return c.json(
+        { error: `La sesión espera una respuesta de "${interrupt.reason}".` },
+        409,
+      );
+    }
+    return streamTurn(c, deps, (onProgress) =>
+      deps.coordinator.resume(state, body.resumption, { onProgress }),
+    );
+  };
 
   app.post('/agent/ask', runAgent('start'));
   app.post('/agent/ask/resume', runAgent('resume'));
@@ -78,9 +88,10 @@ export function createServer(deps: AppDeps): Hono {
 
   // ── trace (AgentOps debugger feed) ────────────────────────────────────────
   app.get('/trace/:sessionId', async (c) => {
-    const trace = await deps.sessionStore.getTrace(c.req.param('sessionId'));
+    const sessionId = c.req.param('sessionId');
+    const trace = await deps.sessionStore.getTrace(sessionId);
     if (!trace) return c.json({ error: 'Sesión no encontrada' }, 404);
-    return c.json({ sessionId: c.req.param('sessionId'), events: trace });
+    return c.json({ sessionId, events: trace });
   });
 
   // ── OEFA REST ─────────────────────────────────────────────────────────────
@@ -90,7 +101,7 @@ export function createServer(deps: AppDeps): Hono {
     return ds ? c.json(ds) : c.json({ error: 'Dataset no encontrado' }, 404);
   });
   app.get('/oefa/search', async (c) => {
-    const filter = OefaFilterSchema.parse(c.req.query());
+    const filter = OefaSearchSchema.parse(c.req.query());
     return c.json(await deps.oefa.searchRecords(filter));
   });
   app.get('/oefa/company/:name', async (c) => {
@@ -114,4 +125,49 @@ export function createServer(deps: AppDeps): Hono {
   });
 
   return app;
+}
+
+/** Shared SSE driver: stream progress events, persist, and always end with `done`. */
+function streamTurn(
+  c: Context,
+  deps: AppDeps,
+  run: (onProgress: OnProgress) => Promise<OrchestratorState>,
+) {
+  return streamSSE(c, async (stream) => {
+    const send = async (event: StreamEvent) => {
+      // Swallow write errors: a disconnected client must not abort the run, so
+      // the resulting state still gets persisted (durable suspend/resume).
+      try {
+        await stream.writeSSE({ event: event.type, data: JSON.stringify(event) });
+      } catch {
+        /* client gone */
+      }
+    };
+
+    let next: OrchestratorState | undefined;
+    try {
+      next = await run(send);
+    } catch (err) {
+      await send({
+        type: 'error',
+        payload: { code: 'orchestrator_error', message: err instanceof Error ? err.message : String(err) },
+      });
+    }
+
+    let status: ExecutionStatus = next?.executionStatus ?? 'failed';
+    let sessionId = next?.sessionId ?? 'unknown';
+    if (next) {
+      try {
+        await deps.sessionStore.saveState(next);
+      } catch (err) {
+        status = 'failed';
+        sessionId = next.sessionId;
+        await send({
+          type: 'error',
+          payload: { code: 'persist_error', message: err instanceof Error ? err.message : String(err) },
+        });
+      }
+    }
+    await send({ type: 'done', payload: { sessionId, status } });
+  });
 }

@@ -1,4 +1,5 @@
-import type { OefaQueryResult, OefaRecord, ResolutionStatus } from '@agentops/shared';
+import { ResolutionStatus, type OefaQueryResult, type OefaRecord } from '@agentops/shared';
+import { z } from 'zod';
 import {
   DATASET_COVERAGE,
   getDataset,
@@ -91,16 +92,19 @@ export class SeedRecordSource implements OefaRecordSource {
 // Filters, aggregates, and entity resolution.
 // ─────────────────────────────────────────────────────────────────────────────
 
-export interface RecordFilter {
-  administrado?: string;
-  ruc?: string;
-  sector?: string;
-  region?: string; // departamento
-  yearFrom?: number;
-  yearTo?: number;
-  status?: ResolutionStatus;
-  infraction?: string; // matches hechosImputados / normativaIncumplida
-}
+/** The single source of truth for the record-filter contract — reused by the
+ *  DataAgent tool and the `/oefa/search` REST endpoint (no duplicate copies). */
+export const RecordFilterSchema = z.object({
+  administrado: z.string().optional(),
+  ruc: z.string().optional(),
+  sector: z.string().optional(),
+  region: z.string().optional(), // departamento
+  yearFrom: z.number().int().optional(),
+  yearTo: z.number().int().optional(),
+  status: ResolutionStatus.optional(),
+  infraction: z.string().optional(), // matches hechosImputados / normativaIncumplida
+});
+export type RecordFilter = z.infer<typeof RecordFilterSchema>;
 
 export function applyFilter(records: OefaRecord[], f: RecordFilter): OefaRecord[] {
   return records.filter((r) => {

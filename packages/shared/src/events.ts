@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { Id } from './common.js';
+import { ExecutionStatus, Id } from './common.js';
 import { EvidenceItem } from './evidence.js';
 import { ClarificationRequest, DomainTaskPacket } from './tasks.js';
 
@@ -83,6 +83,13 @@ export const StreamEvent = z.discriminatedUnion('type', [
     type: z.literal('error'),
     payload: z.object({ code: z.string(), message: z.string() }),
   }),
+  // Terminal frame: every stream ends with exactly one `done`, carrying the
+  // session id and the run's terminal status so a client has a single typed
+  // contract for "the stream ended and here's where it landed" (decision D10).
+  z.object({
+    type: z.literal('done'),
+    payload: z.object({ sessionId: Id, status: ExecutionStatus }),
+  }),
 ]);
 export type StreamEvent = z.infer<typeof StreamEvent>;
 
@@ -96,4 +103,5 @@ export const STREAM_EVENT_TYPES = [
   'approval_required',
   'result',
   'error',
+  'done',
 ] as const;

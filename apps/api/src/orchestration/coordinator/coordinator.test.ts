@@ -293,6 +293,60 @@ describe('Coordinator — robustness', () => {
     expect(state.completedTasks.find((t) => t.taskId === 'good')!.status).toBe('completed');
   });
 
+  it('surfaces an all-failed run instead of reporting "no evidence"', async () => {
+    const boom = fnAgent(AGENT_IDS.data, async () => {
+      throw new Error('caído');
+    });
+    const coord = createCoordinator({
+      planner: staticPlanner({
+        kind: 'plan',
+        reasoning: 'r',
+        tasks: [
+          task({ taskId: 't1', domain: 'oefa_data', operation: 'search' }),
+          task({ taskId: 't2', domain: 'oefa_data', operation: 'search' }),
+        ],
+      }),
+      agents: agentMap(boom),
+      ...deterministic,
+    });
+    const state = await coord.start({ text: 'q', sessionId: 's1', requestContext: {} });
+    expect(state.finalResponseDraft).toMatch(/error/i);
+    expect(state.finalResponseDraft).not.toMatch(/No encontré evidencia/);
+  });
+
+  it('propagates a clarification answer to ALL pending tasks, not just the head', async () => {
+    let docsSawAnswer: unknown;
+    const dataAgent = fnAgent(AGENT_IDS.data, async (t) =>
+      t.inputs.clarificationAnswer
+        ? result(t.taskId, AGENT_IDS.data)
+        : result(t.taskId, AGENT_IDS.data, {
+            status: 'needs_user_input',
+            clarification: { question: '¿Cuál?', candidates: [{ id: 'c1', label: 'A' }, { id: 'c2', label: 'B' }] },
+          }),
+    );
+    const docsAgent = fnAgent(AGENT_IDS.docs, async (t) => {
+      docsSawAnswer = t.inputs.clarificationAnswer;
+      return result(t.taskId, AGENT_IDS.docs);
+    });
+    const coord = createCoordinator({
+      planner: staticPlanner({
+        kind: 'plan',
+        reasoning: 'r',
+        tasks: [
+          task({ taskId: 'data', domain: 'oefa_data', operation: 'search' }),
+          task({ taskId: 'docs', domain: 'oefa_docs', operation: 'search' }),
+        ],
+      }),
+      agents: agentMap(dataAgent, docsAgent),
+      ...deterministic,
+    });
+    const suspended = await coord.start({ text: 'q', sessionId: 's1', requestContext: {} });
+    expect(suspended.executionStatus).toBe('waiting');
+    const done = await coord.resume(suspended, { type: 'clarification', answer: '20543210981' });
+    expect(done.executionStatus).toBe('completed');
+    expect(docsSawAnswer).toBe('20543210981'); // sibling task received the answer too
+  });
+
   it('converts a thrown agent error into a failed result (errors are data)', async () => {
     const boom = fnAgent(AGENT_IDS.data, async () => {
       throw new Error('tool exploded');

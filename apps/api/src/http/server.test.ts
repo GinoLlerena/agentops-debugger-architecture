@@ -73,9 +73,10 @@ describe('Flow B — POST /agent/ask (streaming)', () => {
     expect(result.payload.evidence.some((e) => e.id.startsWith('OEFA:'))).toBe(true);
     expect(result.payload.text.length).toBeGreaterThan(0);
 
-    const done = frames.at(-1)!.data as { sessionId: string; status: string };
-    expect(done.sessionId).toBe('flow-b-1');
-    expect(done.status).toBe('completed');
+    const done = frames.at(-1)!.data as { type: string; payload: { sessionId: string; status: string } };
+    expect(done.type).toBe('done');
+    expect(done.payload.sessionId).toBe('flow-b-1');
+    expect(done.payload.status).toBe('completed');
   });
 
   it('GET /trace/:sessionId reproduces the run', async () => {
@@ -98,8 +99,8 @@ describe('Clarification round-trip — ambiguous entity', () => {
     // "bambas" matches two distinct administrados in the seed → clarification.
     const first = await readSSE(await ask({ text: 'sanciones de bambas', sessionId: 'clar-1' }));
     expect(first.map((f) => f.event)).toContain('clarification_required');
-    const done = first.at(-1)!.data as { status: string };
-    expect(done.status).toBe('waiting');
+    const done = first.at(-1)!.data as { payload: { status: string } };
+    expect(done.payload.status).toBe('waiting');
 
     const resumed = await readSSE(
       await ask(
@@ -108,7 +109,7 @@ describe('Clarification round-trip — ambiguous entity', () => {
       ),
     );
     expect(resumed.map((f) => f.event)).toContain('result');
-    expect((resumed.at(-1)!.data as { status: string }).status).toBe('completed');
+    expect((resumed.at(-1)!.data as { payload: { status: string } }).payload.status).toBe('completed');
   });
 
   it('returns 404 resuming an unknown session', async () => {
@@ -117,6 +118,38 @@ describe('Clarification round-trip — ambiguous entity', () => {
       '/agent/ask/resume',
     );
     expect(res.status).toBe(404);
+  });
+
+  it('rejects a resumption whose type mismatches the suspend reason (409)', async () => {
+    await readSSE(await ask({ text: 'sanciones de bambas', sessionId: 'clar-mismatch' }));
+    // session is waiting on a clarification; send an approval instead
+    const res = await ask(
+      { sessionId: 'clar-mismatch', resumption: { type: 'approval', approved: true } },
+      '/agent/ask/resume',
+    );
+    expect(res.status).toBe(409);
+  });
+
+  it('guards re-running a waiting session (409, use /resume)', async () => {
+    await readSSE(await ask({ text: 'sanciones de bambas', sessionId: 'clar-guard' }));
+    const res = await ask({ text: 'otra cosa', sessionId: 'clar-guard' });
+    expect(res.status).toBe(409);
+  });
+});
+
+describe('input validation', () => {
+  it('returns 400 (not 500) for a malformed request body', async () => {
+    const res = await ask({}); // missing required `text`
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 400 for /rag/retrieve with limit:0', async () => {
+    const res = await app.request('/rag/retrieve', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ query: 'x', limit: 0 }),
+    });
+    expect(res.status).toBe(400);
   });
 });
 
@@ -131,6 +164,20 @@ describe('REST endpoints', () => {
     const body = (await res.json()) as { records: Array<{ sector?: string }> };
     expect(body.records.length).toBeGreaterThan(0);
     expect(body.records.every((r) => r.sector === 'Minería')).toBe(true);
+  });
+
+  it('GET /oefa/search filters by resolution status (restored capability)', async () => {
+    const res = await app.request('/oefa/search?status=firme');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { records: Array<{ resolutionStatus: string }> };
+    expect(body.records.length).toBeGreaterThan(0);
+    expect(body.records.every((r) => r.resolutionStatus === 'firme')).toBe(true);
+  });
+
+  it('GET /oefa/search treats an empty year param as absent (not 0)', async () => {
+    const res = await app.request('/oefa/search?yearTo=');
+    const body = (await res.json()) as { records: unknown[] };
+    expect(body.records.length).toBeGreaterThan(0); // would be 0 if "" coerced to year 0
   });
 
   it('POST /rag/retrieve returns ranked chunks', async () => {

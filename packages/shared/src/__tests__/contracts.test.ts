@@ -41,6 +41,7 @@ describe('schemas parse their valid fixtures', () => {
     ['NormalizedUserRequest', NormalizedUserRequest, fx.validNormalizedUserRequest],
     ['StreamEvent(plan)', StreamEvent, fx.validStreamEventPlan],
     ['StreamEvent(result)', StreamEvent, fx.validStreamEventResult],
+    ['StreamEvent(done)', StreamEvent, fx.validStreamEventDone],
   ];
 
   it.each(cases)('%s accepts its fixture', (_name, schema, fixture) => {

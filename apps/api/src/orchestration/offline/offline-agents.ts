@@ -82,8 +82,11 @@ function recordToEvidence(r: OefaRecord): EvidenceItem {
 /** Pick an entity query from a free-text question: an 11-digit RUC wins; else the
  *  longest query token that appears in some administrado name. */
 function entityQueryFor(question: string, records: OefaRecord[]): string {
+  // Only treat an 11-digit run as a RUC if it actually matches a known record —
+  // otherwise a stray document id / number would shadow a company name present
+  // in the same question.
   const ruc = question.match(/\b\d{11}\b/);
-  if (ruc) return ruc[0];
+  if (ruc && records.some((r) => r.ruc === ruc[0])) return ruc[0];
   const nameTokens = new Set(records.flatMap((r) => clean(r.administrado)));
   const candidates = clean(question)
     .filter((t) => nameTokens.has(t))
@@ -103,7 +106,7 @@ export function createOfflineDataAgent(oefa: OefaService): SpecialistAgent {
       const profile = await oefa.getCompanyProfile(entityQuery);
 
       if (profile.status === 'ambiguous') {
-        return mkResult(task, 'needs_user_input', 'Se requiere desambiguar el administrado.', {
+        return mkResult(AGENT_IDS.data, task, 'needs_user_input', 'Se requiere desambiguar el administrado.', {
           clarification: {
             question: `Encontré ${profile.candidates.length} administrados similares. ¿Cuál?`,
             candidates: profile.candidates.map((c) => ({
@@ -118,7 +121,7 @@ export function createOfflineDataAgent(oefa: OefaService): SpecialistAgent {
       }
 
       if (profile.status === 'not_found') {
-        return mkResult(task, 'completed', 'No encontré evidencia en las fuentes consultadas.', {});
+        return mkResult(AGENT_IDS.data, task, 'completed', 'No encontré evidencia en las fuentes consultadas.', {});
       }
 
       const { entity, records, stats } = profile.profile;
@@ -143,6 +146,7 @@ export function createOfflineDataAgent(oefa: OefaService): SpecialistAgent {
         data: { records, stats },
       };
       return mkResult(
+        AGENT_IDS.data,
         task,
         'completed',
         `${stats.totalRecords} registros de ${entity.administrado} (${stats.firmCount} firmes).`,
@@ -163,7 +167,7 @@ export function createOfflineDocsAgent(rag: RagService): SpecialistAgent {
         task.instruction;
       const results = await rag.retrieve(query, { limit: 3 });
       if (results.length === 0) {
-        return mkResult(task, 'completed', 'No se recuperaron documentos relevantes.', {});
+        return mkResult(AGENT_IDS.docs, task, 'completed', 'No se recuperaron documentos relevantes.', {});
       }
       const evidence: EvidenceItem[] = results.map((r) => ({
         id: r.chunk.id,
@@ -182,7 +186,7 @@ export function createOfflineDocsAgent(rag: RagService): SpecialistAgent {
           confidence: 'directa',
         },
       ];
-      return mkResult(task, 'completed', `${evidence.length} fragmentos recuperados.`, {
+      return mkResult(AGENT_IDS.docs, task, 'completed', `${evidence.length} fragmentos recuperados.`, {
         evidence,
         findings,
       });
@@ -191,6 +195,7 @@ export function createOfflineDocsAgent(rag: RagService): SpecialistAgent {
 }
 
 function mkResult(
+  agentId: string,
   task: DomainTaskPacket,
   status: DomainTaskResult['status'],
   summary: string,
@@ -198,7 +203,7 @@ function mkResult(
 ): DomainTaskResult {
   return {
     taskId: task.taskId,
-    agentId: task.agentId ?? AGENT_IDS.data,
+    agentId: task.agentId ?? agentId, // routeStep sets task.agentId; fall back to the agent's own id
     status,
     summary,
     artifacts: [],

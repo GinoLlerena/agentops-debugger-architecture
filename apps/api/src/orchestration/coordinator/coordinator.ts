@@ -378,11 +378,17 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
     ];
 
     if (interrupt.taskId) {
-      // agent-origin: inject the answer into the active task and re-run it
-      const head = state.pendingTasks[0];
-      if (head && head.taskId === interrupt.taskId) {
-        head.inputs = { ...head.inputs, clarificationAnswer: resumption.answer };
-      }
+      // agent-origin: inject the answer into ALL remaining tasks (not just the
+      // head) so sibling tasks (e.g. docs after data disambiguation) also use the
+      // resolved entity instead of the original ambiguous query.
+      state.workspace.entityRefs = {
+        ...state.workspace.entityRefs,
+        clarificationAnswer: resumption.answer,
+      };
+      state.pendingTasks = state.pendingTasks.map((t) => ({
+        ...t,
+        inputs: { ...t.inputs, clarificationAnswer: resumption.answer },
+      }));
       return drive(state, onProgress);
     }
     // planner-origin: re-plan with the original request + the answer in context
@@ -408,7 +414,11 @@ function defaultSummary(state: OrchestratorState): string {
     .map((t) => t.summary.trim())
     .filter(Boolean);
   if (summaries.length > 0) return summaries.join(' ');
-  const n = state.completedTasks.length;
-  if (n === 0) return 'No se realizaron acciones.';
+  if (state.completedTasks.length === 0) return 'No se realizaron acciones.';
+  // No successful task. Distinguish "ran but found nothing" from "everything errored".
+  const failed = state.completedTasks.filter((t) => t.status === 'failed').length;
+  if (failed > 0) {
+    return `No se pudo completar la consulta: ${failed} de ${state.completedTasks.length} tarea(s) presentaron errores.`;
+  }
   return 'No encontré evidencia en las fuentes consultadas.';
 }

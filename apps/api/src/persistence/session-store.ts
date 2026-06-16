@@ -27,10 +27,11 @@ export class SessionStore {
   }
 
   async listSessions(limit?: number): Promise<Session[]> {
-    const docs = await this.docs.list<Session>(COLLECTIONS.sessions, { limit });
-    return docs
-      .map((d) => d.value)
-      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    // Sort by recency BEFORE truncating — applying the limit at the store level
+    // would slice by id order and return the wrong subset.
+    const docs = await this.docs.list<Session>(COLLECTIONS.sessions);
+    const sorted = docs.map((d) => d.value).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    return limit != null ? sorted.slice(0, limit) : sorted;
   }
 
   /** The execution trace for a session = its ledger (architecture §13). */
@@ -51,7 +52,9 @@ export class SessionStore {
       subjectEntity: existing?.subjectEntity,
       lastResultSummary: existing?.lastResultSummary,
       reportIds: existing?.reportIds ?? [],
-      messageCount: state.conversation.turnSummaries.length + 1,
+      // One save == one turn (a start or a resume); increment rather than derive
+      // from turnSummaries, which the coordinator does not yet populate.
+      messageCount: (existing?.messageCount ?? 0) + 1,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     };

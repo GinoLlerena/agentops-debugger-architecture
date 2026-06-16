@@ -1,23 +1,14 @@
-import { OefaDatasetConfig, OefaQueryResult, OefaRecord, ResolutionStatus } from '@agentops/shared';
+import { OefaDatasetConfig, OefaQueryResult, OefaRecord } from '@agentops/shared';
 import { z } from 'zod';
 import { defineTool, type ToolDescriptor } from '../tools/types.js';
 import { OEFA_DATASETS, type OefaDatasetKey } from './datasets.js';
-import type { OefaService } from './oefa-service.js';
+import { RecordFilterSchema, type OefaService } from './oefa-service.js';
 
 const datasetKeySchema = z
   .enum(Object.keys(OEFA_DATASETS) as [OefaDatasetKey, ...OefaDatasetKey[]])
   .describe('Clave del dataset OEFA (p. ej. resolucionesMultaFirmes)');
 
-const filterSchema = z.object({
-  administrado: z.string().optional(),
-  ruc: z.string().optional(),
-  sector: z.string().optional(),
-  region: z.string().optional(),
-  yearFrom: z.number().int().optional(),
-  yearTo: z.number().int().optional(),
-  status: ResolutionStatus.optional(),
-  infraction: z.string().optional(),
-});
+const filterSchema = RecordFilterSchema;
 
 const entityCandidateSchema = z.object({
   administrado: z.string(),
