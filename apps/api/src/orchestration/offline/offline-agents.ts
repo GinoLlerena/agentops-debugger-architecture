@@ -9,6 +9,8 @@ import type {
 import type { OefaService } from '../../services/oefa/oefa-service.js';
 import type { RagService } from '../../services/rag/index.js';
 import { buildOefaCharts } from '../../services/charts/oefa-charts.js';
+import type { ReportStore } from '../../persistence/report-store.js';
+import { createOfflineReportAgent, createOfflineReportManager } from './offline-report-agents.js';
 import { foldAccents } from '../../services/util/text.js';
 import { AGENT_IDS } from '../manifests/registry.js';
 import type { Planner, PlanResult, SpecialistAgent } from '../coordinator/types.js';
@@ -27,7 +29,13 @@ function clean(text: string): string[] {
     .filter((t) => t.length >= 4);
 }
 
-/** Heuristic planner: any query → resolve entity (data) + ground in docs (RAG). */
+/** Does the query ask for a report/informe (Flow A) vs a grounded answer (Flow B)? */
+function isReportIntent(query: string): boolean {
+  return /\b(informe|reporte|genera|elabora|prepara)\b/.test(foldAccents(query));
+}
+
+/** Heuristic planner: any query → resolve entity (data) + ground in docs (RAG);
+ *  a report request additionally drafts the report and gates the save on HITL. */
 export function createOfflinePlanner(): Planner {
   return {
     async plan({ request }): Promise<PlanResult> {
@@ -55,10 +63,33 @@ export function createOfflinePlanner(): Planner {
           dependsOn: [],
         },
       ];
+      if (isReportIntent(query)) {
+        tasks.push(
+          {
+            taskId: 'report',
+            domain: 'report',
+            operation: 'create',
+            title: 'Redactar el informe de antecedentes',
+            instruction: 'Cruzar datos y evidencia; redactar hallazgos, advertencias y recomendaciones.',
+            inputs: {},
+            dependsOn: ['data', 'docs'],
+          },
+          {
+            taskId: 'save',
+            domain: 'report_admin',
+            operation: 'create',
+            title: 'Guardar el informe',
+            instruction: 'Guardar y finalizar el informe (requiere aprobación).',
+            inputs: {},
+            dependsOn: ['report'],
+          },
+        );
+      }
       return {
         kind: 'plan',
-        reasoning:
-          'La consulta requiere historial de cumplimiento: combino datos públicos de OEFA con los documentos del corpus para responder con citas.',
+        reasoning: isReportIntent(query)
+          ? 'La consulta pide un informe: reúno datos y documentos, redacto el informe y solicito tu aprobación antes de guardarlo.'
+          : 'La consulta requiere historial de cumplimiento: combino datos públicos de OEFA con los documentos del corpus para responder con citas.',
         tasks,
       };
     },
@@ -232,13 +263,20 @@ function mkResult(
   };
 }
 
-/** The offline specialist agent map (Data + Docs). */
+/** The offline specialist agent map (Data + Docs + Report + ReportManager). */
 export function createOfflineAgents(deps: {
   oefa: OefaService;
   rag: RagService;
+  reportStore: ReportStore;
+  idgen?: () => string;
+  clock?: () => Date;
 }): Record<string, SpecialistAgent> {
+  const idgen = deps.idgen ?? (() => crypto.randomUUID().split('-')[0]!);
+  const clock = deps.clock ?? (() => new Date());
   return {
     [AGENT_IDS.data]: createOfflineDataAgent(deps.oefa),
     [AGENT_IDS.docs]: createOfflineDocsAgent(deps.rag),
+    [AGENT_IDS.report]: createOfflineReportAgent(deps.reportStore, idgen, clock),
+    [AGENT_IDS.reportManager]: createOfflineReportManager(deps.reportStore),
   };
 }

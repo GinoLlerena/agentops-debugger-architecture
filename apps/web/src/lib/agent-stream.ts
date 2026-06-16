@@ -41,7 +41,7 @@ export type ChatMessage =
       question: string;
       candidates: { id: string; label: string; ruc?: string; sector?: string; note?: string }[];
     }
-  | { id: string; kind: 'approval'; interruptId: string; description: string }
+  | { id: string; kind: 'approval'; interruptId: string; description: string; reportPreviewId?: string }
   | { id: string; kind: 'notice'; text: string }
   | { id: string; kind: 'error'; message: string };
 
@@ -55,6 +55,8 @@ export interface ChatState {
   charts: ChartSpec[];
   /** Canvas tab the agent requested via an open_tab uiAction (agent-driven UI). */
   requestedTab?: CanvasTab;
+  /** Report id to render in the Informe tab (draft on approval, then saved). */
+  reportId?: string;
 }
 
 export const initialChatState: ChatState = {
@@ -106,6 +108,7 @@ export function reduceEvent(state: ChatState, event: StreamEvent): ChatState {
         evidence: [],
         charts: [],
         requestedTab: undefined,
+        reportId: undefined,
         messages: [
           ...state.messages,
           { id: nextId(), kind: 'plan', reasoning: event.payload.reasoning, tasks },
@@ -154,6 +157,9 @@ export function reduceEvent(state: ChatState, event: StreamEvent): ChatState {
       return {
         ...state,
         status: 'waiting',
+        // Show the draft for review: track its id and switch to the Informe tab.
+        reportId: event.payload.reportPreviewId ?? state.reportId,
+        requestedTab: event.payload.reportPreviewId ? 'informe' : state.requestedTab,
         messages: [
           ...state.messages,
           {
@@ -161,6 +167,7 @@ export function reduceEvent(state: ChatState, event: StreamEvent): ChatState {
             kind: 'approval',
             interruptId: event.payload.interruptId,
             description: event.payload.description,
+            reportPreviewId: event.payload.reportPreviewId,
           },
         ],
       };

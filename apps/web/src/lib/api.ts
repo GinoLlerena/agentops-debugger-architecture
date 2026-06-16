@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import type { LedgerEvent, OefaQueryResult, Session } from '@agentops/shared';
+import type { LedgerEvent, OefaQueryResult, Report, Session } from '@agentops/shared';
 
 async function getJson<T>(path: string): Promise<T> {
   const res = await fetch(path);
@@ -30,6 +30,14 @@ export function useTrace(sessionId: string, enabled = true) {
       getJson<{ sessionId: string; events: LedgerEvent[] }>(
         `/trace/${encodeURIComponent(sessionId)}`,
       ).then((r) => r.events),
+  });
+}
+
+export function useReport(reportId: string | undefined) {
+  return useQuery({
+    queryKey: ['report', reportId],
+    enabled: Boolean(reportId),
+    queryFn: () => getJson<Report>(`/reports/${encodeURIComponent(reportId!)}`),
   });
 }
 

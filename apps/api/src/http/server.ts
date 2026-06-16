@@ -113,6 +113,13 @@ export function createServer(deps: AppDeps): Hono {
     return c.json({ results });
   });
 
+  // ── reports ──────────────────────────────────────────────────────────────
+  app.get('/reports', async (c) => c.json({ reports: await deps.reportStore.list() }));
+  app.get('/reports/:id', async (c) => {
+    const report = await deps.reportStore.get(c.req.param('id'));
+    return report ? c.json(report) : c.json({ error: 'Informe no encontrado' }, 404);
+  });
+
   // ── sessions ──────────────────────────────────────────────────────────────
   app.get('/sessions', async (c) => c.json({ sessions: await deps.sessionStore.listSessions() }));
   app.get('/sessions/:id', async (c) => {

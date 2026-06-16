@@ -1,8 +1,10 @@
 import type { EvidenceItem } from '@agentops/shared';
 import { useEffect, useState } from 'react';
 import type { ChatState } from '../lib/agent-stream.js';
+import { useReport } from '../lib/api.js';
 import { ChartView } from './charts.js';
 import { EvidenceChip } from './evidence.js';
+import { ReportView } from './ReportView.js';
 
 type Tab = 'resumen' | 'datos' | 'documentos' | 'informe';
 const TABS: { id: Tab; label: string }[] = [
@@ -96,9 +98,7 @@ export function Canvas({
             <EmptyState text="Sin documentos recuperados todavía." />
           ))}
 
-        {tab === 'informe' && (
-          <EmptyState text="El informe estructurado se generará tras la aprobación (HITL)." />
-        )}
+        {tab === 'informe' && <InformeTab reportId={state.reportId} onOpenEvidence={onOpenEvidence} evidence={state.evidence} />}
       </div>
     </div>
   );
@@ -131,6 +131,24 @@ function EvidenceList({
       ))}
     </ul>
   );
+}
+
+function InformeTab({
+  reportId,
+  evidence,
+  onOpenEvidence,
+}: {
+  reportId?: string;
+  evidence: EvidenceItem[];
+  onOpenEvidence: (item: EvidenceItem) => void;
+}) {
+  const report = useReport(reportId);
+  if (!reportId) {
+    return <EmptyState text="El informe estructurado se generará tras la aprobación (HITL)." />;
+  }
+  if (report.isLoading) return <EmptyState text="Cargando informe…" />;
+  if (!report.data) return <EmptyState text="No se pudo cargar el informe." />;
+  return <ReportView report={report.data} evidence={evidence} onOpenEvidence={onOpenEvidence} />;
 }
 
 function EmptyState({ text = 'El panel se irá llenando con la evidencia de tu investigación.' }) {

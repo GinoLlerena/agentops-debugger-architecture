@@ -11,6 +11,7 @@ export default defineConfig({
       '/oefa': { target: 'http://localhost:8787', changeOrigin: true },
       '/rag': { target: 'http://localhost:8787', changeOrigin: true },
       '/sessions': { target: 'http://localhost:8787', changeOrigin: true },
+      '/reports': { target: 'http://localhost:8787', changeOrigin: true },
       '/trace': { target: 'http://localhost:8787', changeOrigin: true },
       '/health': { target: 'http://localhost:8787', changeOrigin: true },
     },

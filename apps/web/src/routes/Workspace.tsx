@@ -8,8 +8,8 @@ import { Button } from '../components/ui.js';
 import { useAgentStream } from '../lib/use-agent.js';
 
 const SUGGESTIONS = [
+  'Genera un informe de antecedentes del RUC 20543210981',
   'Antecedentes del administrado con RUC 20543210981',
-  'Sanciones firmes en el sector minería',
   '¿Qué sanciones tiene bambas?',
 ];
 
