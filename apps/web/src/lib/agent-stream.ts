@@ -1,9 +1,12 @@
 import {
+  ChartSpec,
   StreamEvent,
   type EvidenceItem,
   type ExecutionStatus,
   type DomainTaskPacket,
 } from '@agentops/shared';
+
+export type CanvasTab = 'resumen' | 'datos' | 'documentos' | 'informe';
 
 /**
  * Client-side model of a chat turn, folded from the typed SSE event envelope.
@@ -48,9 +51,18 @@ export interface ChatState {
   messages: ChatMessage[];
   /** Evidence accumulated across the turn — feeds the canvas + evidence drawer. */
   evidence: EvidenceItem[];
+  /** Charts the agent asked the canvas to render (chart_data artifacts). */
+  charts: ChartSpec[];
+  /** Canvas tab the agent requested via an open_tab uiAction (agent-driven UI). */
+  requestedTab?: CanvasTab;
 }
 
-export const initialChatState: ChatState = { status: 'idle', messages: [], evidence: [] };
+export const initialChatState: ChatState = {
+  status: 'idle',
+  messages: [],
+  evidence: [],
+  charts: [],
+};
 
 let seq = 0;
 const nextId = (): string => `m${++seq}`;
@@ -86,9 +98,14 @@ export function reduceEvent(state: ChatState, event: StreamEvent): ChatState {
         agentId: t.agentId,
         status: 'pending',
       }));
+      // A plan marks a new turn: reset per-turn canvas state so a follow-up
+      // query never shows the previous turn's charts/evidence or a stale tab.
       return {
         ...state,
         status: 'running',
+        evidence: [],
+        charts: [],
+        requestedTab: undefined,
         messages: [
           ...state.messages,
           { id: nextId(), kind: 'plan', reasoning: event.payload.reasoning, tasks },
@@ -151,9 +168,22 @@ export function reduceEvent(state: ChatState, event: StreamEvent): ChatState {
       // Accumulate evidence across the turn, de-duped by id (the canvas reads it).
       const byId = new Map(state.evidence.map((e) => [e.id, e]));
       for (const e of event.payload.evidence) if (!byId.has(e.id)) byId.set(e.id, e);
+      // Collect chart_data artifacts the agent streamed — validate at the boundary
+      // (ArtifactRecord.data is opaque), so a malformed chart can't crash the canvas.
+      const chartById = new Map(state.charts.map((c) => [c.id, c]));
+      for (const a of event.payload.artifacts) {
+        if (a.kind !== 'chart_data') continue;
+        const parsed = ChartSpec.safeParse(a.data);
+        if (parsed.success) chartById.set(a.id, parsed.data);
+      }
+      // Apply open_tab uiActions (the agent driving the canvas).
+      let requestedTab = state.requestedTab;
+      for (const ua of event.payload.uiActions) if (ua.action === 'open_tab') requestedTab = ua.tab;
       return {
         ...state,
         evidence: [...byId.values()],
+        charts: [...chartById.values()],
+        requestedTab,
         messages: [
           ...state.messages,
           {

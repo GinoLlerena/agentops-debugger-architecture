@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { ExecutionStatus, Id } from './common.js';
-import { EvidenceItem } from './evidence.js';
+import { ArtifactRecord, EvidenceItem } from './evidence.js';
 import { ClarificationRequest, DomainTaskPacket } from './tasks.js';
 
 /**
@@ -76,6 +76,8 @@ export const StreamEvent = z.discriminatedUnion('type', [
       text: z.string(),
       uiActions: z.array(UiAction).default([]),
       evidence: z.array(EvidenceItem).default([]),
+      /** Streamed artifacts the canvas renders (e.g. chart_data). Kept small. */
+      artifacts: z.array(ArtifactRecord).default([]),
       resultSummary: z.record(z.unknown()).optional(),
     }),
   }),

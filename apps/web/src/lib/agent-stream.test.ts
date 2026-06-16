@@ -71,6 +71,7 @@ describe('reduceEvent — terminal + branches', () => {
           text: 'Listo',
           uiActions: [],
           evidence: [{ id: 'E1', documentTitle: 'Doc', passage: 'p', confidence: 'directa' }],
+          artifacts: [],
         },
       },
       { type: 'done', payload: { sessionId: 's1', status: 'completed' } },
@@ -125,6 +126,7 @@ describe('reduceEvent — terminal + branches', () => {
             { id: 'A', documentTitle: 'd', passage: 'p', confidence: 'directa' },
             { id: 'B', documentTitle: 'd', passage: 'p', confidence: 'directa' },
           ],
+          artifacts: [],
         },
       },
       {
@@ -136,9 +138,83 @@ describe('reduceEvent — terminal + branches', () => {
             { id: 'B', documentTitle: 'd', passage: 'p', confidence: 'directa' }, // dup
             { id: 'C', documentTitle: 'd', passage: 'p', confidence: 'directa' },
           ],
+          artifacts: [],
         },
       },
     ]);
     expect(state.evidence.map((e) => e.id)).toEqual(['A', 'B', 'C']);
+  });
+
+  it('collects chart_data artifacts and applies an open_tab uiAction', () => {
+    const chart = {
+      id: 'oefa-sanciones-por-anio',
+      kind: 'bar' as const,
+      title: '¿Cuántas por año?',
+      series: [{ label: '2023', value: 3 }],
+      source: 'API OEFA',
+      asOf: '2026-06-13T12:00:00.000Z',
+    };
+    const state = fold([
+      {
+        type: 'result',
+        payload: {
+          text: 'ok',
+          uiActions: [
+            { action: 'render_chart', chartId: chart.id, artifactId: chart.id },
+            { action: 'open_tab', tab: 'datos' },
+          ],
+          evidence: [],
+          artifacts: [
+            {
+              id: chart.id,
+              kind: 'chart_data',
+              producedByAgentId: 'data-agent',
+              createdAt: '2026-06-13T12:00:00.000Z',
+              data: chart,
+            },
+          ],
+        },
+      },
+    ]);
+    expect(state.charts.map((c) => c.id)).toEqual(['oefa-sanciones-por-anio']);
+    expect(state.requestedTab).toBe('datos');
+  });
+
+  it('resets charts/evidence/requestedTab at a new turn (plan)', () => {
+    const seeded: ChatState = {
+      ...initialChatState,
+      evidence: [{ id: 'E', documentTitle: 'd', passage: 'p', confidence: 'directa' }],
+      charts: [
+        { id: 'c', kind: 'bar', title: 't', series: [], source: 's', asOf: 'a' },
+      ],
+      requestedTab: 'datos',
+    };
+    const next = reduceEvent(seeded, { type: 'plan', payload: { reasoning: 'r', tasks: [] } });
+    expect(next.evidence).toEqual([]);
+    expect(next.charts).toEqual([]);
+    expect(next.requestedTab).toBeUndefined();
+  });
+
+  it('skips a malformed chart_data artifact instead of storing it', () => {
+    const state = fold([
+      {
+        type: 'result',
+        payload: {
+          text: 'ok',
+          uiActions: [],
+          evidence: [],
+          artifacts: [
+            {
+              id: 'bad',
+              kind: 'chart_data',
+              producedByAgentId: 'data-agent',
+              createdAt: '2026-06-13T12:00:00.000Z',
+              data: { nope: true }, // not a valid ChartSpec
+            },
+          ],
+        },
+      },
+    ]);
+    expect(state.charts).toEqual([]);
   });
 });

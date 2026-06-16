@@ -124,6 +124,37 @@ describe('Coordinator — happy path', () => {
     expect(events.map((e) => e.type)).toEqual(['plan', 'task_start', 'task_done', 'result']);
   });
 
+  it('surfaces chart_data artifacts in the result with render_chart + open_tab uiActions', async () => {
+    const events: StreamEvent[] = [];
+    const chartArtifact = {
+      id: 'oefa-sanciones-por-anio',
+      kind: 'chart_data' as const,
+      producedByAgentId: AGENT_IDS.data,
+      createdAt: '2026-06-13T12:00:00.000Z',
+      summary: 'sanciones por año',
+      data: { id: 'oefa-sanciones-por-anio', kind: 'bar', title: 't', series: [], source: 's', asOf: 'a' },
+    };
+    const coord = createCoordinator({
+      planner: staticPlanner({
+        kind: 'plan',
+        reasoning: 'r',
+        tasks: [task({ taskId: 'data', domain: 'oefa_data', operation: 'search' })],
+      }),
+      agents: agentMap(okAgent(AGENT_IDS.data, { artifacts: [chartArtifact] })),
+      ...deterministic,
+    });
+    await coord.start({ text: 'q', sessionId: 's1', requestContext: {} }, { onProgress: (e) => void events.push(e) });
+
+    const result = events.find((e) => e.type === 'result');
+    expect(result && result.type === 'result' && result.payload.artifacts.map((a) => a.id)).toEqual([
+      'oefa-sanciones-por-anio',
+    ]);
+    const actions = result && result.type === 'result' ? result.payload.uiActions : [];
+    // Charts travel via `artifacts`; the only uiAction is the tab switch.
+    expect(actions.some((a) => a.action === 'open_tab' && a.tab === 'datos')).toBe(true);
+    expect(actions.some((a) => a.action === 'render_chart')).toBe(false);
+  });
+
   it('answers directly when the planner returns a reply (no tasks)', async () => {
     const coord = createCoordinator({
       planner: staticPlanner({ kind: 'reply', text: 'No encontré evidencia en las fuentes.' }),

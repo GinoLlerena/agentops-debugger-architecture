@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   AgentManifest,
+  ChartSpec,
   DomainTaskPacket,
   DomainTaskResult,
   EvidenceItem,
@@ -42,6 +43,7 @@ describe('schemas parse their valid fixtures', () => {
     ['StreamEvent(plan)', StreamEvent, fx.validStreamEventPlan],
     ['StreamEvent(result)', StreamEvent, fx.validStreamEventResult],
     ['StreamEvent(done)', StreamEvent, fx.validStreamEventDone],
+    ['ChartSpec', ChartSpec, fx.validChartSpec],
   ];
 
   it.each(cases)('%s accepts its fixture', (_name, schema, fixture) => {

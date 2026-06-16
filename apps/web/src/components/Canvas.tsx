@@ -1,6 +1,7 @@
 import type { EvidenceItem } from '@agentops/shared';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ChatState } from '../lib/agent-stream.js';
+import { ChartView } from './charts.js';
 import { EvidenceChip } from './evidence.js';
 
 type Tab = 'resumen' | 'datos' | 'documentos' | 'informe';
@@ -20,6 +21,12 @@ export function Canvas({
   onOpenEvidence: (item: EvidenceItem) => void;
 }) {
   const [tab, setTab] = useState<Tab>('resumen');
+  // Honor the agent's open_tab request (≤1 auto-switch per turn).
+  useEffect(() => {
+    if (state.requestedTab) setTab(state.requestedTab);
+  }, [state.requestedTab]);
+  const timelineCharts = state.charts.filter((c) => c.kind === 'timeline');
+  const dataCharts = state.charts.filter((c) => c.kind !== 'timeline');
   // Attribute by the producing agent (stamped by the orchestrator); fall back to
   // the legacy "OEFA:" id prefix only when attribution is absent.
   const isData = (e: EvidenceItem) =>
@@ -54,6 +61,9 @@ export function Canvas({
           (lastResult && lastResult.kind === 'result' ? (
             <div className="space-y-3">
               <p className="text-sm leading-relaxed">{lastResult.text}</p>
+              {timelineCharts.map((c) => (
+                <ChartView key={c.id} spec={c} />
+              ))}
               <EvidenceList items={state.evidence} labelFor={labelFor} onOpenEvidence={onOpenEvidence} />
             </div>
           ) : (
@@ -61,8 +71,20 @@ export function Canvas({
           ))}
 
         {tab === 'datos' &&
-          (oefaEvidence.length ? (
-            <EvidenceList items={oefaEvidence} labelFor={labelFor} onOpenEvidence={onOpenEvidence} dense />
+          (dataCharts.length || oefaEvidence.length ? (
+            <div className="space-y-3">
+              {dataCharts.map((c) => (
+                <ChartView key={c.id} spec={c} />
+              ))}
+              {oefaEvidence.length > 0 && (
+                <EvidenceList
+                  items={oefaEvidence}
+                  labelFor={labelFor}
+                  onOpenEvidence={onOpenEvidence}
+                  dense
+                />
+              )}
+            </div>
           ) : (
             <EmptyState text="Sin datos para esta sesión todavía." />
           ))}

@@ -6,6 +6,7 @@
 export * from './common.js';
 export * from './oefa.js';
 export * from './evidence.js';
+export * from './chart.js';
 export * from './tasks.js';
 export * from './manifest.js';
 export * from './ledger.js';
