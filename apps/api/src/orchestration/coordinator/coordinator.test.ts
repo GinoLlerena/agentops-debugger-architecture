@@ -150,8 +150,9 @@ describe('Coordinator — happy path', () => {
       'oefa-sanciones-por-anio',
     ]);
     const actions = result && result.type === 'result' ? result.payload.uiActions : [];
-    expect(actions.some((a) => a.action === 'render_chart' && a.artifactId === 'oefa-sanciones-por-anio')).toBe(true);
+    // Charts travel via `artifacts`; the only uiAction is the tab switch.
     expect(actions.some((a) => a.action === 'open_tab' && a.tab === 'datos')).toBe(true);
+    expect(actions.some((a) => a.action === 'render_chart')).toBe(false);
   });
 
   it('answers directly when the planner returns a reply (no tasks)', async () => {

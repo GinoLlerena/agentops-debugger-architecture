@@ -179,4 +179,42 @@ describe('reduceEvent — terminal + branches', () => {
     expect(state.charts.map((c) => c.id)).toEqual(['oefa-sanciones-por-anio']);
     expect(state.requestedTab).toBe('datos');
   });
+
+  it('resets charts/evidence/requestedTab at a new turn (plan)', () => {
+    const seeded: ChatState = {
+      ...initialChatState,
+      evidence: [{ id: 'E', documentTitle: 'd', passage: 'p', confidence: 'directa' }],
+      charts: [
+        { id: 'c', kind: 'bar', title: 't', series: [], source: 's', asOf: 'a' },
+      ],
+      requestedTab: 'datos',
+    };
+    const next = reduceEvent(seeded, { type: 'plan', payload: { reasoning: 'r', tasks: [] } });
+    expect(next.evidence).toEqual([]);
+    expect(next.charts).toEqual([]);
+    expect(next.requestedTab).toBeUndefined();
+  });
+
+  it('skips a malformed chart_data artifact instead of storing it', () => {
+    const state = fold([
+      {
+        type: 'result',
+        payload: {
+          text: 'ok',
+          uiActions: [],
+          evidence: [],
+          artifacts: [
+            {
+              id: 'bad',
+              kind: 'chart_data',
+              producedByAgentId: 'data-agent',
+              createdAt: '2026-06-13T12:00:00.000Z',
+              data: { nope: true }, // not a valid ChartSpec
+            },
+          ],
+        },
+      },
+    ]);
+    expect(state.charts).toEqual([]);
+  });
 });

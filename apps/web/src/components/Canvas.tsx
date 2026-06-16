@@ -26,6 +26,7 @@ export function Canvas({
     if (state.requestedTab) setTab(state.requestedTab);
   }, [state.requestedTab]);
   const timelineCharts = state.charts.filter((c) => c.kind === 'timeline');
+  const dataCharts = state.charts.filter((c) => c.kind !== 'timeline');
   // Attribute by the producing agent (stamped by the orchestrator); fall back to
   // the legacy "OEFA:" id prefix only when attribution is absent.
   const isData = (e: EvidenceItem) =>
@@ -70,9 +71,9 @@ export function Canvas({
           ))}
 
         {tab === 'datos' &&
-          (state.charts.length || oefaEvidence.length ? (
+          (dataCharts.length || oefaEvidence.length ? (
             <div className="space-y-3">
-              {state.charts.map((c) => (
+              {dataCharts.map((c) => (
                 <ChartView key={c.id} spec={c} />
               ))}
               {oefaEvidence.length > 0 && (

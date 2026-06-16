@@ -9,7 +9,7 @@ import { Id } from './common.js';
  * alone — that is the renderer's job; the spec just carries the data.
  */
 
-export const ChartKind = z.enum(['bar', 'severity', 'timeline', 'line']);
+export const ChartKind = z.enum(['bar', 'severity', 'timeline']);
 export type ChartKind = z.infer<typeof ChartKind>;
 
 /** A generic data point; fields are interpreted per chart kind. */

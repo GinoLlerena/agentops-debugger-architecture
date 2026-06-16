@@ -315,21 +315,24 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
     return false;
   }
 
-  function finalize(state: OrchestratorState, onProgress: OnProgress): OrchestratorState {
+  function finalize(
+    state: OrchestratorState,
+    onProgress: OnProgress,
+    opts: { suppressUi?: boolean } = {},
+  ): OrchestratorState {
     if (state.executionStatus !== 'failed') state.executionStatus = 'completed';
     const evidence = collectAllEvidence(state);
     const text = state.finalResponseDraft ?? defaultSummary(state);
     state.finalResponseDraft = text;
 
-    // Surface chart_data artifacts to the canvas + drive the UI to show them
-    // (structured generative UI: the agent asks the canvas to render/switch).
-    const charts = Object.values(state.artifacts).filter((a) => a.kind === 'chart_data');
-    const uiActions: UiAction[] = charts.map((c) => ({
-      action: 'render_chart',
-      chartId: c.id,
-      artifactId: c.id,
-    }));
-    if (charts.length > 0) uiActions.push({ action: 'open_tab', tab: 'datos' });
+    // Surface chart_data artifacts to the canvas and ask it to switch tab
+    // (structured generative UI). Suppressed on cancellation/denial so a cancelled
+    // run doesn't yank the user to the data tab. Charts travel via `artifacts`;
+    // the client renders from them (no per-chart render_chart action needed).
+    const charts = opts.suppressUi
+      ? []
+      : Object.values(state.artifacts).filter((a) => a.kind === 'chart_data');
+    const uiActions: UiAction[] = charts.length > 0 ? [{ action: 'open_tab', tab: 'datos' }] : [];
 
     void emit(onProgress, {
       type: 'result',
@@ -380,7 +383,7 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
           state.pendingTasks = state.pendingTasks.filter((t) => t.taskId !== interrupt.taskId);
         }
         state.finalResponseDraft = 'La acción fue cancelada. No se guardó ni exportó nada.';
-        return finalize(state, onProgress);
+        return finalize(state, onProgress, { suppressUi: true });
       }
       if (interrupt.taskId) markApproved(state, interrupt.taskId);
       ledger(state, 'approval_granted', {}, { taskId: interrupt.taskId });

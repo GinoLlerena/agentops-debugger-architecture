@@ -1,6 +1,6 @@
 import {
+  ChartSpec,
   StreamEvent,
-  type ChartSpec,
   type EvidenceItem,
   type ExecutionStatus,
   type DomainTaskPacket,
@@ -98,9 +98,14 @@ export function reduceEvent(state: ChatState, event: StreamEvent): ChatState {
         agentId: t.agentId,
         status: 'pending',
       }));
+      // A plan marks a new turn: reset per-turn canvas state so a follow-up
+      // query never shows the previous turn's charts/evidence or a stale tab.
       return {
         ...state,
         status: 'running',
+        evidence: [],
+        charts: [],
+        requestedTab: undefined,
         messages: [
           ...state.messages,
           { id: nextId(), kind: 'plan', reasoning: event.payload.reasoning, tasks },
@@ -163,10 +168,13 @@ export function reduceEvent(state: ChatState, event: StreamEvent): ChatState {
       // Accumulate evidence across the turn, de-duped by id (the canvas reads it).
       const byId = new Map(state.evidence.map((e) => [e.id, e]));
       for (const e of event.payload.evidence) if (!byId.has(e.id)) byId.set(e.id, e);
-      // Collect chart_data artifacts the agent streamed.
+      // Collect chart_data artifacts the agent streamed — validate at the boundary
+      // (ArtifactRecord.data is opaque), so a malformed chart can't crash the canvas.
       const chartById = new Map(state.charts.map((c) => [c.id, c]));
       for (const a of event.payload.artifacts) {
-        if (a.kind === 'chart_data') chartById.set(a.id, a.data as ChartSpec);
+        if (a.kind !== 'chart_data') continue;
+        const parsed = ChartSpec.safeParse(a.data);
+        if (parsed.success) chartById.set(a.id, parsed.data);
       }
       // Apply open_tab uiActions (the agent driving the canvas).
       let requestedTab = state.requestedTab;

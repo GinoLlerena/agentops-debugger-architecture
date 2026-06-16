@@ -52,6 +52,39 @@ describe('buildOefaCharts', () => {
     expect(timeline.series.map((p) => p.date)).toEqual(['05/06/2021', '10/02/2023', '15/09/2023']);
   });
 
+  it('omits a year whose fines are all unknown (no misleading 0-UIT bar)', () => {
+    const charts = buildOefaCharts(
+      [
+        rec({ id: 'x', actoAdministrativoDate: '01/01/2022', fineAmountUit: 200, resolutionStatus: 'firme' }),
+        rec({ id: 'y', actoAdministrativoDate: '01/01/2020', resolutionStatus: 'firme' }), // no fine
+      ],
+      ctx,
+    );
+    const bar = charts.find((c) => c.kind === 'bar')!;
+    expect(bar.series.map((p) => p.label)).toEqual(['2022']); // 2020 omitted
+  });
+
+  it('drops timeline milestones with an unparseable date', () => {
+    const charts = buildOefaCharts(
+      [
+        rec({ id: 'g', actoAdministrativoDate: '10/02/2023', resolutionStatus: 'firme' }),
+        rec({ id: 'bad', actoAdministrativoDate: 'Sin fecha', resolutionStatus: 'firme' }),
+      ],
+      ctx,
+    );
+    const timeline = charts.find((c) => c.kind === 'timeline')!;
+    expect(timeline.series.map((p) => p.date)).toEqual(['10/02/2023']);
+  });
+
+  it('includes a status not in the canonical order rather than dropping it', () => {
+    const charts = buildOefaCharts(
+      [rec({ id: 'z', actoAdministrativoDate: '01/01/2023', resolutionStatus: 'desconocido' })],
+      ctx,
+    );
+    const sev = charts.find((c) => c.kind === 'severity')!;
+    expect(sev.series.some((p) => p.category === 'desconocido')).toBe(true);
+  });
+
   it('returns no charts for an empty record set', () => {
     expect(buildOefaCharts([], ctx)).toEqual([]);
   });

@@ -22,12 +22,13 @@ export function buildOefaCharts(records: OefaRecord[], ctx: ChartContext): Chart
   const charts: ChartSpec[] = [];
   const stamp = { source: ctx.source, coverage: ctx.coverage, asOf: ctx.asOf, producedByAgentId: ctx.producedByAgentId };
 
-  // C2 — sanciones (UIT) por año
+  // C2 — sanciones (UIT) por año. Only count years with a known fine, so a year
+  // whose fines are all unknown doesn't render a misleading "confirmed 0 UIT" bar.
   const byYearUit = new Map<number, number>();
   for (const r of records) {
     const y = recordYear(r);
-    if (y == null) continue;
-    byYearUit.set(y, (byYearUit.get(y) ?? 0) + (r.fineAmountUit ?? 0));
+    if (y == null || r.fineAmountUit == null) continue;
+    byYearUit.set(y, (byYearUit.get(y) ?? 0) + r.fineAmountUit);
   }
   if (byYearUit.size > 0) {
     charts.push({
@@ -46,25 +47,32 @@ export function buildOefaCharts(records: OefaRecord[], ctx: ChartContext): Chart
   const byStatus = new Map<string, number>();
   for (const r of records) byStatus.set(r.resolutionStatus, (byStatus.get(r.resolutionStatus) ?? 0) + 1);
   if (byStatus.size > 0) {
+    // Known statuses in canonical order, then any status not in STATUS_ORDER, so a
+    // new/unknown resolution status is never silently dropped from the chart.
+    const ordered = [
+      ...STATUS_ORDER.filter((s) => byStatus.has(s)),
+      ...[...byStatus.keys()].filter((s) => !STATUS_ORDER.includes(s)),
+    ];
     charts.push({
       id: 'oefa-distribucion-estado',
       kind: 'severity',
       title: '¿Cómo se distribuyen las resoluciones por estado?',
       unit: 'registros',
-      series: STATUS_ORDER.filter((s) => byStatus.has(s)).map((s) => ({
-        label: s,
-        value: byStatus.get(s)!,
-        category: s,
-      })),
+      series: ordered.map((s) => ({ label: s, value: byStatus.get(s)!, category: s })),
       ...stamp,
     });
   }
 
-  // C1 — línea de tiempo procesal (milestones from records, chronological)
+  // C1 — línea de tiempo procesal (milestones from records, chronological).
+  // Precompute the sort key once and drop milestones whose date is unparseable
+  // (key 0) so they don't sort to the front and corrupt the order.
   const milestones = records
-    .map((r) => ({ r, date: r.actoAdministrativoDate ?? r.supervisionEnd ?? r.supervisionStart }))
-    .filter((m) => m.date)
-    .sort((a, b) => parseDdmmyyyy(a.date!) - parseDdmmyyyy(b.date!));
+    .map((r) => {
+      const date = r.actoAdministrativoDate ?? r.supervisionEnd ?? r.supervisionStart;
+      return { r, date, key: date ? parseDdmmyyyy(date) : 0 };
+    })
+    .filter((m) => m.key > 0)
+    .sort((a, b) => a.key - b.key);
   if (milestones.length > 0) {
     charts.push({
       id: 'oefa-linea-de-tiempo',
