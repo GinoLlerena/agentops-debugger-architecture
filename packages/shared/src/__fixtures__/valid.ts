@@ -227,3 +227,8 @@ export const validStreamEventResult = {
     evidence: [validEvidenceItem],
   },
 };
+
+export const validStreamEventDone = {
+  type: 'done',
+  payload: { sessionId: 'session-1', status: 'completed' },
+};
