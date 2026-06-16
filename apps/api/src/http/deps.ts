@@ -18,6 +18,7 @@ import { createSpecialistAgents } from '../orchestration/agents/specialists.js';
 import { createQwenPlanner } from '../orchestration/agents/planner.js';
 import { createOfflineAgents, createOfflinePlanner } from '../orchestration/offline/offline-agents.js';
 import { SessionStore } from '../persistence/session-store.js';
+import { ReportStore } from '../persistence/report-store.js';
 
 /** Everything the HTTP layer closes over. Built once at startup (or per test). */
 export interface AppDeps {
@@ -28,6 +29,7 @@ export interface AppDeps {
   rag: RagService;
   coordinator: Coordinator;
   sessionStore: SessionStore;
+  reportStore: ReportStore;
 }
 
 /**
@@ -46,6 +48,8 @@ export async function buildDeps(env: Env = getEnv()): Promise<AppDeps> {
   const rag = new RagService({ embedder: maybeCreateEmbedder(env) });
   await rag.indexDocuments(await loadSeedCorpus());
 
+  const reportStore = new ReportStore(stores.documents);
+
   const live = isQwenConfigured(env);
   let coordinator: Coordinator;
   if (live) {
@@ -57,7 +61,7 @@ export async function buildDeps(env: Env = getEnv()): Promise<AppDeps> {
   } else {
     coordinator = createCoordinator({
       planner: createOfflinePlanner(),
-      agents: createOfflineAgents({ oefa, rag }),
+      agents: createOfflineAgents({ oefa, rag, reportStore }),
     });
   }
 
@@ -69,5 +73,6 @@ export async function buildDeps(env: Env = getEnv()): Promise<AppDeps> {
     rag,
     coordinator,
     sessionStore: new SessionStore(stores.documents),
+    reportStore,
   };
 }

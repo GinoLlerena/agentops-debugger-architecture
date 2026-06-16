@@ -210,9 +210,16 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
         state.executionStatus = 'waiting';
         state.interruptState = { interruptId: idgen(), reason: 'approval', taskId: task.taskId };
         ledger(state, 'approval_required', {}, { taskId: task.taskId, agentId });
+        // If a report draft was produced, point the approval card at it so the
+        // user can review the draft (in the Informe tab) before approving.
+        const draft = Object.values(state.artifacts).find((a) => a.kind === 'report_draft');
         await emit(onProgress, {
           type: 'approval_required',
-          payload: { interruptId: state.interruptState.interruptId, description: task.title },
+          payload: {
+            interruptId: state.interruptState.interruptId,
+            description: task.title,
+            reportPreviewId: draft?.id,
+          },
         });
         return state; // suspend
       }
@@ -329,10 +336,16 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
     // (structured generative UI). Suppressed on cancellation/denial so a cancelled
     // run doesn't yank the user to the data tab. Charts travel via `artifacts`;
     // the client renders from them (no per-chart render_chart action needed).
-    const charts = opts.suppressUi
-      ? []
-      : Object.values(state.artifacts).filter((a) => a.kind === 'chart_data');
-    const uiActions: UiAction[] = charts.length > 0 ? [{ action: 'open_tab', tab: 'datos' }] : [];
+    const artifactList = opts.suppressUi ? [] : Object.values(state.artifacts);
+    const charts = artifactList.filter((a) => a.kind === 'chart_data');
+    const hasReport = artifactList.some((a) => a.kind === 'report_draft');
+    // Land on the Informe tab when a report was produced (the focus of Flow A),
+    // otherwise the Datos tab when there are charts.
+    const uiActions: UiAction[] = hasReport
+      ? [{ action: 'open_tab', tab: 'informe' }]
+      : charts.length > 0
+        ? [{ action: 'open_tab', tab: 'datos' }]
+        : [];
 
     void emit(onProgress, {
       type: 'result',

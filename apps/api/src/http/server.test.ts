@@ -153,6 +153,60 @@ describe('input validation', () => {
   });
 });
 
+describe('Flow A — report generation with HITL approval', () => {
+  it('drafts a report, gates the save on approval, then persists it as approved', async () => {
+    const first = await readSSE(
+      await ask({ text: 'Genera un informe del administrado con RUC 20543210981', sessionId: 'flow-a-1' }),
+    );
+    const types = first.map((f) => f.event);
+    expect(types).toContain('approval_required');
+    // the approval card points at the drafted report
+    const approval = first.find((f) => f.event === 'approval_required')!.data as {
+      payload: { reportPreviewId?: string };
+    };
+    const reportId = approval.payload.reportPreviewId;
+    expect(reportId).toBeTruthy();
+    expect((first.at(-1)!.data as { payload: { status: string } }).payload.status).toBe('waiting');
+
+    // the draft is retrievable and not yet approved
+    const draft = (await (await app.request(`/reports/${reportId}`)).json()) as { status: string };
+    expect(draft.status).toBe('draft');
+
+    // approve → the save runs and the report becomes approved
+    const resumed = await readSSE(
+      await ask(
+        { sessionId: 'flow-a-1', resumption: { type: 'approval', approved: true } },
+        '/agent/ask/resume',
+      ),
+    );
+    expect((resumed.at(-1)!.data as { payload: { status: string } }).payload.status).toBe('completed');
+    const saved = (await (await app.request(`/reports/${reportId}`)).json()) as { status: string };
+    expect(saved.status).toBe('approved');
+  });
+
+  it('does not persist-approve when the user cancels (and no tab yank)', async () => {
+    const first = await readSSE(
+      await ask({ text: 'Genera un informe del RUC 20543210981', sessionId: 'flow-a-cancel' }),
+    );
+    const reportId = (first.find((f) => f.event === 'approval_required')!.data as {
+      payload: { reportPreviewId?: string };
+    }).payload.reportPreviewId;
+    const resumed = await readSSE(
+      await ask(
+        { sessionId: 'flow-a-cancel', resumption: { type: 'approval', approved: false } },
+        '/agent/ask/resume',
+      ),
+    );
+    // cancelled run does not emit an open_tab uiAction
+    const result = resumed.find((f) => f.event === 'result')!.data as {
+      payload: { uiActions: unknown[] };
+    };
+    expect(result.payload.uiActions).toEqual([]);
+    const report = (await (await app.request(`/reports/${reportId}`)).json()) as { status: string };
+    expect(report.status).toBe('draft'); // still a draft, not approved
+  });
+});
+
 describe('REST endpoints', () => {
   it('GET /oefa/datasets lists the verified datasets', async () => {
     const body = (await (await app.request('/oefa/datasets')).json()) as { datasets: unknown[] };

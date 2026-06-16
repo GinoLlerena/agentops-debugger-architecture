@@ -103,6 +103,17 @@ describe('reduceEvent — terminal + branches', () => {
     expect(state.messages.some((m) => m.kind === 'approval')).toBe(true);
   });
 
+  it('on an approval with a report preview, tracks the report and opens the Informe tab', () => {
+    const state = fold([
+      {
+        type: 'approval_required',
+        payload: { interruptId: 'i1', description: 'Guardar informe', reportPreviewId: 'report-9' },
+      },
+    ]);
+    expect(state.reportId).toBe('report-9');
+    expect(state.requestedTab).toBe('informe');
+  });
+
   it('settles status to failed on an error event (UI never stuck on running)', () => {
     const state = fold([
       {
