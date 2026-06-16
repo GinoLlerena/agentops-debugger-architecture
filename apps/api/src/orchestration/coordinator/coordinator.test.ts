@@ -97,6 +97,21 @@ describe('Coordinator — happy path', () => {
     expect(state.completedTasks[2]!.findings).toHaveLength(1); // finding kept (cited E1)
   });
 
+  it('stamps every evidence item with its producing agent', async () => {
+    const planner = staticPlanner({
+      kind: 'plan',
+      reasoning: 'r',
+      tasks: [task({ taskId: 't1', domain: 'oefa_data', operation: 'search' })],
+    });
+    const agents = agentMap(
+      okAgent(AGENT_IDS.data, { evidence: [evidence('E1')] }), // evidence has no producedByAgentId
+    );
+    const coord = createCoordinator({ planner, agents, ...deterministic });
+    const state = await coord.start({ text: 'q', sessionId: 's1', requestContext: {} });
+    const stamped = state.completedTasks[0]!.evidence[0]!;
+    expect(stamped.producedByAgentId).toBe(AGENT_IDS.data);
+  });
+
   it('emits a coherent progress event sequence', async () => {
     const events: StreamEvent[] = [];
     const planner = staticPlanner({

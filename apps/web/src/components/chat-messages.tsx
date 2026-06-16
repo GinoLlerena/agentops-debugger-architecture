@@ -48,7 +48,7 @@ function Message({ message, handlers }: { message: ChatMessage; handlers: Handle
                 <button
                   key={c.id}
                   disabled={handlers.busy}
-                  onClick={() => handlers.onResume({ type: 'clarification', answer: c.ruc ?? c.id })}
+                  onClick={() => handlers.onResume({ type: 'clarification', answer: c.ruc ?? c.label })}
                   className="rounded-card border border-linea bg-superficie px-3 py-1.5 text-left text-sm hover:bg-papel disabled:opacity-50"
                 >
                   <div className="font-semibold">{c.label}</div>
@@ -138,15 +138,27 @@ const STATUS_ICON: Record<TaskRow['status'], string> = {
 };
 
 function PlanChecklist({ reasoning, tasks }: { reasoning: string; tasks: TaskRow[] }) {
-  const running = tasks.some((t) => t.status === 'running' || t.status === 'pending');
-  const doneCount = tasks.filter((t) => t.status === 'done').length;
+  const active = tasks.some((t) => t.status === 'running' || t.status === 'pending');
+  const anyFailed = tasks.some((t) => t.status === 'failed');
+  const settled = tasks.filter((t) => t.status === 'done' || t.status === 'failed' || t.status === 'skipped').length;
+  const headerIcon = active ? (
+    <Spinner />
+  ) : anyFailed ? (
+    <span className="text-ambar" aria-label="con errores">
+      ⚠
+    </span>
+  ) : (
+    <span className="text-verde-fiscal" aria-label="completado">
+      ✔
+    </span>
+  );
   return (
     <Card>
       <CardHeader>
-        {running ? <Spinner /> : <span className="text-verde-fiscal">✔</span>}
+        {headerIcon}
         <Eyebrow>Plan</Eyebrow>
         <span className="ml-auto mono text-2xs text-gris-ev">
-          {doneCount} de {tasks.length}
+          {settled} de {tasks.length}
         </span>
       </CardHeader>
       <div className="space-y-2 p-3">

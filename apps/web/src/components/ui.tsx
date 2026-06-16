@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 
 /** Minimal shadcn-style primitives styled with the project tokens (UX §8). */
 
@@ -83,6 +83,17 @@ export function Sheet({
   width?: number;
   children: ReactNode;
 }) {
+  // Esc closes the sheet regardless of where focus sits (a panel-level keydown
+  // would never fire since focus stays on the trigger/body).
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [open, onClose]);
+
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-40" role="dialog" aria-modal="true" aria-label={title}>
@@ -90,7 +101,6 @@ export function Sheet({
       <div
         className="absolute right-0 top-0 flex h-full flex-col bg-superficie shadow-xl"
         style={{ width }}
-        onKeyDown={(e) => e.key === 'Escape' && onClose()}
       >
         <div className="flex items-center justify-between border-b border-linea px-4 py-3">
           <h2 className="text-lg font-semibold">{title}</h2>

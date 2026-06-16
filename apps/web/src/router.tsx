@@ -4,11 +4,19 @@ import {
   createRouter,
   Outlet,
   redirect,
+  useParams,
 } from '@tanstack/react-router';
 import { AppShell } from './components/AppShell.js';
 import { Dashboard } from './routes/Dashboard.js';
 import { Workspace } from './routes/Workspace.js';
 import { newSessionId } from './lib/ids.js';
+
+/** Remount the Workspace when the session id changes so each session gets a fresh
+ *  hook instance (no stale chat carried across navigation). */
+function WorkspaceRoute() {
+  const { sessionId } = useParams({ strict: false }) as { sessionId: string };
+  return <Workspace key={sessionId} sessionId={sessionId} />;
+}
 
 const rootRoute = createRootRoute({
   component: () => (
@@ -27,7 +35,7 @@ const dashboardRoute = createRoute({
 const workspaceRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/sesiones/$sessionId',
-  component: Workspace,
+  component: WorkspaceRoute,
 });
 
 // /nueva → mint a fresh session id and redirect into the Workspace.

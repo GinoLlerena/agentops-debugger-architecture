@@ -44,6 +44,21 @@ describe('ChatThread', () => {
     expect(onResume).toHaveBeenCalledWith({ type: 'clarification', answer: '20543210981' });
   });
 
+  it('falls back to the candidate label (not the opaque id) when no ruc', () => {
+    const onResume = vi.fn();
+    const messages: ChatMessage[] = [
+      {
+        id: 'c1',
+        kind: 'clarification',
+        question: '¿Cuál sector?',
+        candidates: [{ id: 'c1', label: 'Minería' }],
+      },
+    ];
+    render(<ChatThread messages={messages} handlers={{ ...noop, onResume }} />);
+    fireEvent.click(screen.getByText('Minería'));
+    expect(onResume).toHaveBeenCalledWith({ type: 'clarification', answer: 'Minería' });
+  });
+
   it('approve/cancel buttons fire the approval resumption', () => {
     const onResume = vi.fn();
     const messages: ChatMessage[] = [

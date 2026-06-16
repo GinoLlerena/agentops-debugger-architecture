@@ -147,10 +147,13 @@ export function reduceEvent(state: ChatState, event: StreamEvent): ChatState {
           },
         ],
       };
-    case 'result':
+    case 'result': {
+      // Accumulate evidence across the turn, de-duped by id (the canvas reads it).
+      const byId = new Map(state.evidence.map((e) => [e.id, e]));
+      for (const e of event.payload.evidence) if (!byId.has(e.id)) byId.set(e.id, e);
       return {
         ...state,
-        evidence: event.payload.evidence,
+        evidence: [...byId.values()],
         messages: [
           ...state.messages,
           {
@@ -162,9 +165,12 @@ export function reduceEvent(state: ChatState, event: StreamEvent): ChatState {
           },
         ],
       };
+    }
     case 'error':
+      // An error is terminal: settle status so the UI never stays stuck on 'running'.
       return {
         ...state,
+        status: 'failed',
         messages: [
           ...state.messages,
           { id: nextId(), kind: 'error', message: event.payload.message },
@@ -195,39 +201,59 @@ export function parseSSEBuffer(buffer: string): { events: StreamEvent[]; rest: s
   return { events, rest };
 }
 
-/** POST to an /agent/* endpoint and invoke `onEvent` for each streamed event. */
+/**
+ * POST to an /agent/* endpoint and invoke `onEvent` for each streamed event.
+ * Never throws: any failure (non-ok response, missing body, network/read error)
+ * is surfaced as a synthetic `error` event so the caller can always settle state.
+ * An intentional abort is silent (no error event).
+ */
 export async function streamAgent(
   path: string,
   body: unknown,
   onEvent: (event: StreamEvent) => void,
   signal?: AbortSignal,
 ): Promise<void> {
-  const res = await fetch(path, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
-    signal,
-  });
-  if (!res.ok) {
-    const detail = await res.json().catch(() => ({ error: res.statusText }));
+  try {
+    const res = await fetch(path, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+      signal,
+    });
+    if (!res.ok) {
+      const detail = await res.json().catch(() => ({ error: res.statusText }));
+      onEvent({
+        type: 'error',
+        payload: {
+          code: String(res.status),
+          message: (detail as { error?: string }).error ?? `Error ${res.status}`,
+        },
+      });
+      return;
+    }
+    if (!res.body) {
+      onEvent({ type: 'error', payload: { code: 'no_body', message: 'Respuesta sin cuerpo.' } });
+      return;
+    }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const { events, rest } = parseSSEBuffer(buffer);
+      buffer = rest;
+      for (const event of events) onEvent(event);
+    }
+    buffer += decoder.decode(); // flush any pending multibyte bytes
+    const { events } = parseSSEBuffer(`${buffer}\n\n`); // flush any trailing frame
+    for (const event of events) onEvent(event);
+  } catch (err) {
+    if (signal?.aborted) return; // intentional cancellation — stay silent
     onEvent({
       type: 'error',
-      payload: { code: String(res.status), message: (detail as { error?: string }).error ?? 'Error' },
+      payload: { code: 'network', message: err instanceof Error ? err.message : 'Error de red' },
     });
-    return;
   }
-  if (!res.body) return;
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const { events, rest } = parseSSEBuffer(buffer);
-    buffer = rest;
-    for (const event of events) onEvent(event);
-  }
-  const { events } = parseSSEBuffer(buffer + '\n\n'); // flush any trailing frame
-  for (const event of events) onEvent(event);
 }

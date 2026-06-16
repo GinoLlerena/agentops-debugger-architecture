@@ -101,4 +101,44 @@ describe('reduceEvent — terminal + branches', () => {
     expect(state.status).toBe('waiting');
     expect(state.messages.some((m) => m.kind === 'approval')).toBe(true);
   });
+
+  it('settles status to failed on an error event (UI never stuck on running)', () => {
+    const state = fold([
+      {
+        type: 'plan',
+        payload: { reasoning: 'r', tasks: [] },
+      },
+      { type: 'error', payload: { code: '500', message: 'boom' } },
+    ]);
+    expect(state.status).toBe('failed');
+    expect(state.messages.some((m) => m.kind === 'error')).toBe(true);
+  });
+
+  it('accumulates evidence across multiple results, de-duped by id', () => {
+    const state = fold([
+      {
+        type: 'result',
+        payload: {
+          text: 't1',
+          uiActions: [],
+          evidence: [
+            { id: 'A', documentTitle: 'd', passage: 'p', confidence: 'directa' },
+            { id: 'B', documentTitle: 'd', passage: 'p', confidence: 'directa' },
+          ],
+        },
+      },
+      {
+        type: 'result',
+        payload: {
+          text: 't2',
+          uiActions: [],
+          evidence: [
+            { id: 'B', documentTitle: 'd', passage: 'p', confidence: 'directa' }, // dup
+            { id: 'C', documentTitle: 'd', passage: 'p', confidence: 'directa' },
+          ],
+        },
+      },
+    ]);
+    expect(state.evidence.map((e) => e.id)).toEqual(['A', 'B', 'C']);
+  });
 });

@@ -1,5 +1,4 @@
 import type { EvidenceItem } from '@agentops/shared';
-import { useParams } from '@tanstack/react-router';
 import { useEffect, useRef, useState } from 'react';
 import { Canvas } from '../components/Canvas.js';
 import { ChatThread } from '../components/chat-messages.js';
@@ -14,8 +13,9 @@ const SUGGESTIONS = [
   '¿Qué sanciones tiene bambas?',
 ];
 
-export function Workspace() {
-  const { sessionId } = useParams({ strict: false }) as { sessionId: string };
+/** `sessionId` is a prop (the route wrapper keys the component by it) so each
+ *  session gets a fresh hook instance with its own state. */
+export function Workspace({ sessionId }: { sessionId: string }) {
   const { state, send, resume } = useAgentStream(sessionId);
   const [input, setInput] = useState('');
   const [evidence, setEvidence] = useState<EvidenceItem | null>(null);
@@ -23,14 +23,25 @@ export function Workspace() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const busy = state.status === 'running';
 
+  // What the run is suspended on, if anything (clarification vs approval).
+  const pending = [...state.messages]
+    .reverse()
+    .find((m) => m.kind === 'clarification' || m.kind === 'approval');
+  const awaitingClarification = state.status === 'waiting' && pending?.kind === 'clarification';
+  const awaitingApproval = state.status === 'waiting' && pending?.kind === 'approval';
+  const composerDisabled = busy || awaitingApproval; // approvals must use the buttons
+
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [state.messages]);
 
   const submit = () => {
-    if (!input.trim() || busy) return;
-    void send(input);
+    if (!input.trim() || composerDisabled) return;
+    const text = input;
     setInput('');
+    // A free-text reply while awaiting a clarification is a resume, not a new turn.
+    if (awaitingClarification) void resume({ type: 'clarification', answer: text });
+    else void send(text);
   };
 
   return (
@@ -80,12 +91,21 @@ export function Workspace() {
               <input
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && submit()}
-                placeholder="Escribe tu consulta…"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.nativeEvent.isComposing) submit();
+                }}
+                disabled={composerDisabled}
+                placeholder={
+                  awaitingApproval
+                    ? 'Usa los botones de aprobación arriba…'
+                    : awaitingClarification
+                      ? 'Responde la aclaración…'
+                      : 'Escribe tu consulta…'
+                }
                 aria-label="Consulta"
-                className="flex-1 bg-transparent text-sm outline-none"
+                className="flex-1 bg-transparent text-sm outline-none disabled:opacity-50"
               />
-              <Button variant="primary" onClick={submit} disabled={busy || !input.trim()}>
+              <Button variant="primary" onClick={submit} disabled={composerDisabled || !input.trim()}>
                 Enviar
               </Button>
             </div>

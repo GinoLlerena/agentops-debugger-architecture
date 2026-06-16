@@ -4,6 +4,11 @@ import { useSessions } from '../lib/api.js';
 import { Button, Card, Eyebrow } from '../components/ui.js';
 import { newSessionId } from '../lib/ids.js';
 
+function formatDate(iso: string): string {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString('es-PE');
+}
+
 const KPIS = [
   { label: 'Procesos abiertos', value: '—' },
   { label: 'Nuevas resoluciones (mes)', value: '—' },
@@ -56,7 +61,7 @@ export function Dashboard() {
               >
                 <span className="font-semibold">{s.title}</span>
                 <span className="mono ml-auto text-2xs text-gris-ev">
-                  {s.messageCount} turno(s) · {new Date(s.updatedAt).toLocaleDateString('es-PE')}
+                  {s.messageCount} turno(s) · {formatDate(s.updatedAt)}
                 </span>
               </a>
             </li>

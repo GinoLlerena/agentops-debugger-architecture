@@ -20,8 +20,15 @@ export function Canvas({
   onOpenEvidence: (item: EvidenceItem) => void;
 }) {
   const [tab, setTab] = useState<Tab>('resumen');
-  const oefaEvidence = state.evidence.filter((e) => e.id.startsWith('OEFA:'));
-  const docEvidence = state.evidence.filter((e) => !e.id.startsWith('OEFA:'));
+  // Attribute by the producing agent (stamped by the orchestrator); fall back to
+  // the legacy "OEFA:" id prefix only when attribution is absent.
+  const isData = (e: EvidenceItem) =>
+    e.producedByAgentId ? e.producedByAgentId.includes('data') : e.id.startsWith('OEFA:');
+  const oefaEvidence = state.evidence.filter(isData);
+  const docEvidence = state.evidence.filter((e) => !isData(e));
+  // Stable [E#] label = position in the full accumulated evidence list, so the
+  // same item shows the same number in chat, Datos and Documentos.
+  const labelFor = (e: EvidenceItem) => `E${state.evidence.findIndex((x) => x.id === e.id) + 1}`;
   const lastResult = [...state.messages].reverse().find((m) => m.kind === 'result');
 
   return (
@@ -47,7 +54,7 @@ export function Canvas({
           (lastResult && lastResult.kind === 'result' ? (
             <div className="space-y-3">
               <p className="text-sm leading-relaxed">{lastResult.text}</p>
-              <EvidenceList items={state.evidence} onOpenEvidence={onOpenEvidence} />
+              <EvidenceList items={state.evidence} labelFor={labelFor} onOpenEvidence={onOpenEvidence} />
             </div>
           ) : (
             <EmptyState />
@@ -55,14 +62,14 @@ export function Canvas({
 
         {tab === 'datos' &&
           (oefaEvidence.length ? (
-            <EvidenceList items={oefaEvidence} onOpenEvidence={onOpenEvidence} dense />
+            <EvidenceList items={oefaEvidence} labelFor={labelFor} onOpenEvidence={onOpenEvidence} dense />
           ) : (
             <EmptyState text="Sin datos para esta sesión todavía." />
           ))}
 
         {tab === 'documentos' &&
           (docEvidence.length ? (
-            <EvidenceList items={docEvidence} onOpenEvidence={onOpenEvidence} dense />
+            <EvidenceList items={docEvidence} labelFor={labelFor} onOpenEvidence={onOpenEvidence} dense />
           ) : (
             <EmptyState text="Sin documentos recuperados todavía." />
           ))}
@@ -77,19 +84,21 @@ export function Canvas({
 
 function EvidenceList({
   items,
+  labelFor,
   onOpenEvidence,
   dense,
 }: {
   items: EvidenceItem[];
+  labelFor: (item: EvidenceItem) => string;
   onOpenEvidence: (item: EvidenceItem) => void;
   dense?: boolean;
 }) {
   return (
     <ul className="space-y-2">
-      {items.map((e, i) => (
+      {items.map((e) => (
         <li key={e.id} className="rounded-card border border-linea bg-superficie p-2.5 text-sm">
           <div className="flex items-center gap-2">
-            <EvidenceChip item={e} label={`E${i + 1}`} onOpen={onOpenEvidence} />
+            <EvidenceChip item={e} label={labelFor(e)} onOpen={onOpenEvidence} />
             <span className="mono text-2xs text-gris-ev">{e.documentTitle}</span>
             {e.producedByAgentId && (
               <span className="ml-auto eyebrow">⚙ {e.producedByAgentId}</span>
