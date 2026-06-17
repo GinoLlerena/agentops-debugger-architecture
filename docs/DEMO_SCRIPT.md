@@ -77,8 +77,8 @@ plus a custom segmented status-distribution bar and a procedural timeline).
 
 **Do:** click **PDF** (and mention DOCX/XLSX) to download the export.
 
-*Live:* the approved report persists to **Tablestore**; export files are
-generated on demand and streamed (OSS persistence is a planned follow-up).
+*Live:* the approved report persists to **Tablestore**, and exporting it renders
+the file once and stores it in **OSS** (served from there on later downloads).
 
 ---
 
@@ -98,14 +98,14 @@ reproduces exactly how the answer was built.
 ### Scene 6 — Cloud + close (2:45–3:00)
 
 **Show (live):** the Alibaba Cloud console — the **FC function / ECS instance**
-running it, and rows in the **Tablestore** `agentops_kv` table
-(sessions/reports/ledger/snapshots). Flash the proof files: `qwen-provider.ts`,
-`tablestore-client.ts`, `oss-client.ts` (Tablestore is exercised end-to-end; OSS
-is the wired blob seam).
+running it, rows in the **Tablestore** `agentops_kv` table
+(sessions/reports/ledger/snapshots), and the exported report object in the **OSS**
+bucket (`reports/<id>/informe.pdf`). Flash the proof files: `qwen-provider.ts`,
+`tablestore-client.ts`, `oss-client.ts` / `report-exporter.ts`.
 
-> "Qwen Cloud for reasoning, Alibaba Cloud Tablestore for durable state — a
-> transparent, evidence-first agent society for environmental compliance.
-> **Track 3.**"
+> "Qwen Cloud for reasoning, Alibaba Cloud Tablestore and OSS for durable state
+> and report files — a transparent, evidence-first agent society for
+> environmental compliance. **Track 3.**"
 
 ---
 

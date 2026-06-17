@@ -16,7 +16,7 @@
 - **Phase 5** — reports, visualizations & compliance 🚧
   - **5A** agent-driven Recharts visualizations via typed `uiActions` ✅
   - **5B** Flow A — report generation + HITL approval + report view ✅
-  - **5C** report export to PDF / DOCX / XLSX ✅
+  - **5C** report export to PDF / DOCX / XLSX (approved reports persisted to / served from OSS) ✅
   - **5D** compliance — [architecture diagram](docs/ARCHITECTURE.md), [Alibaba Cloud deploy checklist](docs/DEPLOY.md), [demo script](docs/DEMO_SCRIPT.md) ✅ *(credentialed deploy + demo recording pending)*
 
 ### Run the web app (against the offline API)
@@ -60,7 +60,7 @@ Retrieval is **hybrid**: a BM25 lexical index always runs; when `QWEN_EMBEDDING_
 - **Backend** (`apps/api`): Node/TypeScript on **Hono** (+ `@hono/node-server`) + **Mastra** agents (built on the Vercel AI SDK v5 → Qwen Cloud) behind a framework-agnostic, dependency-injected Coordinator engine + REST and streaming `/agent/*` endpoints. The orchestration core is testable with mocked agents (no live LLM); the manifest registry makes routing declarative data.
 - **Contracts** (`packages/shared`): zod schemas shared across boundaries (the single source of truth).
 - **Models:** Qwen Cloud via DashScope (OpenAI-compatible).
-- **Persistence:** Alibaba Cloud Tablestore (sessions, reports, ledger, cache, chunks, snapshots) — exercised end-to-end. OSS is wired as a blob-storage seam (`OssBlobStore`) for documents/exports but not yet on the runtime path (report exports stream in-process today); see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+- **Persistence:** Alibaba Cloud Tablestore (sessions, reports, ledger, cache, chunks, snapshots) + OSS (approved report files, via a read-through cache in `ReportExporter`). Both are exercised on the runtime path; see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - **Data:** OEFA Datos Abiertos (Junar API) + RUIAS CSV seed.
 
 ## Monorepo layout

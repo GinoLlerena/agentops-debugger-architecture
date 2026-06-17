@@ -22,12 +22,11 @@ behind a **HITL approval**, and streams progress. Specialist agents call **tools
 (OEFA Junar client, RAG retriever, report builder, session/report store). The LLM is
 **Qwen** on **Qwen Cloud (DashScope, OpenAI-compatible)** via Mastra on the AI SDK v5.
 Sessions, reports, the ledger, the OEFA cache, doc chunks and suspend snapshots
-persist in **Alibaba Cloud Tablestore**. **Alibaba Cloud OSS** is wired as the
-blob-storage seam — a `BlobStore` port with a working `OssBlobStore` client — for
-uploaded documents and generated report files; the current report-export path
-generates files on demand and streams them as HTTP attachments, so OSS
-file-persistence is provisioned but **not yet on the runtime path** (see the OSS
-note below). Every step appends to an **append-only
+persist in **Alibaba Cloud Tablestore**; generated report files (PDF/DOCX/XLSX)
+persist to **Alibaba Cloud OSS**. Exporting an **approved** report renders the
+file once, stores it in OSS under a canonical key, and serves it from there on
+subsequent requests (a read-through cache via the `BlobStore` port; `OssBlobStore`
+live, in-memory offline). Every step appends to an **append-only
 ledger** that powers both the live task-checklist UI and the after-the-fact
 **Trazabilidad** trace. With no credentials the same wiring degrades to an **offline
 mode** (seed records, lexical RAG, no-LLM agents) so the whole app is demoable and
@@ -58,7 +57,7 @@ flowchart TB
 
   subgraph ALI["Alibaba Cloud"]
     ts[("Tablestore — agentops_kv<br/>sessions · reports · ledger · doc_chunks<br/>oefa_cache · workflow_snapshots · documents")]
-    oss[("OSS — blob seam for docs + report files<br/>(provisioned; not yet on the runtime path)")]
+    oss[("OSS — report files (PDF/DOCX/XLSX)<br/>read-through cache for approved reports")]
     host["Compute: Function Compute or ECS"]
   end
 
@@ -73,7 +72,7 @@ flowchart TB
   tools -- "retrieval" --> embed
   tools -- "OEFA records" --> ext
   coord -- "sessions · reports · ledger · snapshots" --> ts
-  tools -. "report files · uploads (seam, not yet wired)" .-> oss
+  http -- "approved report files (read-through)" --> oss
   BE -. "deployed on" .-> host
 ```
 
@@ -103,8 +102,8 @@ flowchart TB
 │  │ datos       │  │ + chunks │   │ Scope) via │  │ (agentops_kv:       │ │
 │  │ abiertos    │  │ (lexical │   │ Mastra LLM │  │  sessions, reports, │ │
 │  │ OEFA        │  │  default)│   │ provider   │  │  ledger, snapshots…)│ │
-│  └─────────────┘  └──────────┘   └────────────┘  │  OSS blob seam      │ │
-│                                                  │  (not yet wired)    │ │
+│  └─────────────┘  └──────────┘   └────────────┘  │  OSS (report files: │ │
+│                                                  │  approved exports)  │ │
 │                                                  └─────────────────────┘ │
 └──────────────────────────────────────────────────────────────────────────┘
         ▲ Qwen Cloud (DashScope)        ▲ Alibaba Cloud (Tablestore + OSS + FC/ECS)
@@ -119,22 +118,21 @@ services. These are the seams:
 | --- | --- | --- |
 | LLM provider | `apps/api/src/services/qwen/qwen-provider.ts` | Qwen Cloud (DashScope) |
 | Durable state / KV (**exercised end-to-end**) | `apps/api/src/services/storage/tablestore-client.ts` | Alibaba Cloud Tablestore |
-| Object storage (**seam; not yet on the runtime path**) | `apps/api/src/services/storage/oss-client.ts` | Alibaba Cloud OSS |
+| Object storage (**exercised: approved report exports**) | `apps/api/src/services/storage/oss-client.ts`, `apps/api/src/services/report/report-exporter.ts` | Alibaba Cloud OSS |
 | Environment-driven wiring | `apps/api/src/http/deps.ts`, `apps/api/src/config/env.ts` | live ⇄ offline switch |
 
 All three sit behind interfaces (`SpecialistAgent`/`Planner`, `DocumentStore`,
 `BlobStore`); `buildDeps(env)` selects the live implementation when the matching
 credentials are present and the offline equivalent otherwise.
 
-> **OSS status (known gap):** the `OssBlobStore` client is real, compiles, and is
-> selected by `createStores` when `OSS_*` is configured — but no runtime flow
-> writes to it yet. Sessions/reports/trace persist to **Tablestore** (the
-> exercised Alibaba dependency); report **exports** are generated on demand by
-> `GET /reports/:id/export/:fmt` and streamed in-process (`exportReport` →
-> `Response`), not persisted to OSS. Wiring the export path to persist+serve via
-> OSS (`reportFileKey`, signed URLs) is a small, planned follow-up that would turn
-> this seam into an exercised dependency. The Alibaba-usage requirement is already
-> met by Tablestore.
+> **OSS on the runtime path:** `GET /reports/:id/export/:fmt` goes through
+> `ReportExporter` (`report-exporter.ts`), a read-through cache over the
+> `BlobStore`. The first export of an **approved** report renders the file and
+> uploads it under `reportFileKey(id, fmt)`; later requests serve the stored
+> object. In live mode that store is `OssBlobStore` → Alibaba Cloud OSS; offline
+> it is the in-memory store, so the path is identical and fully testable
+> (`report-exporter.test.ts`). Draft reports are mutable, so they render fresh and
+> are not cached. (Document **uploads** remain a future endpoint.)
 
 See
 [`DEPLOY.md`](DEPLOY.md) for provisioning + deployment.

@@ -19,6 +19,7 @@ import { createQwenPlanner } from '../orchestration/agents/planner.js';
 import { createOfflineAgents, createOfflinePlanner } from '../orchestration/offline/offline-agents.js';
 import { SessionStore } from '../persistence/session-store.js';
 import { ReportStore } from '../persistence/report-store.js';
+import { ReportExporter } from '../services/report/report-exporter.js';
 
 /** Everything the HTTP layer closes over. Built once at startup (or per test). */
 export interface AppDeps {
@@ -30,6 +31,7 @@ export interface AppDeps {
   coordinator: Coordinator;
   sessionStore: SessionStore;
   reportStore: ReportStore;
+  reportExporter: ReportExporter;
 }
 
 /**
@@ -74,5 +76,6 @@ export async function buildDeps(env: Env = getEnv()): Promise<AppDeps> {
     coordinator,
     sessionStore: new SessionStore(stores.documents),
     reportStore,
+    reportExporter: new ReportExporter(stores.blobs),
   };
 }

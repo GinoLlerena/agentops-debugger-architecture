@@ -1,9 +1,9 @@
 # Deploy to Alibaba Cloud
 
 Step-by-step checklist to run the AgentOps Debugger backend on **Alibaba Cloud**
-with **Qwen Cloud (DashScope)** as the model provider and **Tablestore** for
-durable state — satisfying the hackathon deployment requirement. (**OSS** is
-provisioned as a blob-storage seam but not yet on the runtime path — see section 3.)
+with **Qwen Cloud (DashScope)** as the model provider, **Tablestore** for durable
+state, and **OSS** for generated report files — satisfying the hackathon
+deployment requirement.
 
 > The app boots in **offline mode** with no credentials (seed records, lexical
 > RAG, no-LLM agents). Each section below turns one integration **live**; add them
@@ -83,18 +83,16 @@ constructor default `agentops_kv`).
 
 ---
 
-## 3. OSS — blob storage (optional; seam not yet wired)
+## 3. OSS — generated report files
 
-> **Status:** OSS is wired as a `BlobStore` port with a working `OssBlobStore`
-> client, but **no runtime flow writes to it yet** — report exports are generated
-> on demand and streamed in-process, and there is no document-upload endpoint.
-> Setting `OSS_*` selects the OSS client over the in-memory one, but the bucket
-> stays empty until the export→OSS persistence follow-up lands. The Alibaba-usage
-> requirement is met by **Tablestore** (section 2), which is exercised end-to-end.
-> Provision OSS now only if you want the bucket ready for that follow-up.
+Exporting an **approved** report persists the rendered PDF/DOCX/XLSX to OSS
+(under `reportFileKey(id, fmt)`) and serves it from there on later requests — a
+read-through cache via the `BlobStore` port (`ReportExporter`). With `OSS_*` set
+the store is `OssBlobStore`; unset, it falls back to the in-memory store (the
+export still works, just not durably). Document uploads are a future endpoint.
 
-1. [ ] Create an OSS **bucket** in your region (private ACL — when the seam is
-       wired, objects will be served via signed URLs, never made public).
+1. [ ] Create an OSS **bucket** in your region (private ACL — objects are written
+       by the app and not made public).
 2. [ ] Note the OSS **region id** (e.g. `oss-ap-southeast-1`) and bucket name.
 
 Env:
@@ -195,7 +193,7 @@ curl -s $HOST/trace/deploy-smoke | head -c 400
 # 4. sessions list survives a process restart  (durable Tablestore state)
 curl -s $HOST/sessions
 
-# 5. Flow A — generate report → approve → export PDF (in-process render; not OSS)
+# 5. Flow A — generate report → approve → export PDF (persists to OSS, then served from it)
 #    (run the ask, capture reportPreviewId, resume with approval, then:)
 curl -s $HOST/reports/<reportId>/export/pdf -o informe.pdf && file informe.pdf
 ```
@@ -205,7 +203,8 @@ Checklist:
 - [ ] A fresh `sessionId` appears in `/sessions` **after a process restart**
       (confirms Tablestore, not in-memory).
 - [ ] `/trace/:id` returns the ledger for a run.
-- [ ] An approved report exports to PDF/DOCX/XLSX.
+- [ ] An approved report exports to PDF/DOCX/XLSX, and the object appears in the
+      OSS bucket under `reports/<reportId>/informe.<fmt>`.
 
 ---
 
@@ -215,11 +214,10 @@ Checklist:
       a live `/agent/ask` request → a cited answer → the `/trace` view, then a
       report generated → approved → exported.
 - [ ] On camera or in the description, point at the Alibaba/Qwen seams:
-      `qwen-provider.ts`, `tablestore-client.ts`, `oss-client.ts` — and show the
-      **Tablestore** console with rows in `agentops_kv` (the exercised dependency:
-      sessions/reports/ledger/snapshots). Note `oss-client.ts` as the
-      blob-storage seam; don't show an empty OSS bucket (report exports stream
-      in-process today — see the OSS note in `ARCHITECTURE.md`).
+      `qwen-provider.ts`, `tablestore-client.ts`, `oss-client.ts` /
+      `report-exporter.ts` — and show the **Tablestore** console with rows in
+      `agentops_kv` (sessions/reports/ledger/snapshots) and the **OSS** bucket
+      with the exported report object under `reports/<id>/informe.<fmt>`.
 - [ ] Capture the Alibaba Cloud console (FC function or ECS instance) to prove
       *where* it runs.
 
@@ -231,6 +229,6 @@ Checklist:
       git. `.env.example` ships placeholders only; `.env` is gitignored.
 - [ ] Use a **RAM** user with least-privilege policies, not the root AccessKey.
 - [ ] `auth_key` is never logged or placed in URLs (the Junar client redacts it).
-- [ ] Keep the OSS bucket private (when the blob seam is wired, objects are
-      served via signed URLs only — never public).
+- [ ] Keep the OSS bucket private — objects are written and read back by the app
+      (streamed to the client), never exposed as public objects.
 - [ ] Rotate the AccessKey after the demo.

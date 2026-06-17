@@ -22,6 +22,14 @@ const CONTENT_TYPE: Record<ExportFormat, string> = {
   xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 };
 
+/** The MIME type for an export format — deterministic, so a cached blob can be
+ *  served (with the right headers) without re-rendering the file. */
+export const contentTypeFor = (format: ExportFormat): string => CONTENT_TYPE[format];
+
+/** The download filename for a report export — deterministic (see above). */
+export const exportFilename = (reportId: string, format: ExportFormat): string =>
+  `informe-${reportId}.${format}`;
+
 export async function exportReport(report: Report, format: ExportFormat): Promise<ExportedFile> {
   const buffer =
     format === 'pdf'
@@ -29,7 +37,11 @@ export async function exportReport(report: Report, format: ExportFormat): Promis
       : format === 'docx'
         ? await toDocx(report)
         : await toXlsx(report);
-  return { buffer, contentType: CONTENT_TYPE[format], filename: `informe-${report.id}.${format}` };
+  return {
+    buffer,
+    contentType: contentTypeFor(format),
+    filename: exportFilename(report.id, format),
+  };
 }
 
 function entityLine(report: Report): string {
