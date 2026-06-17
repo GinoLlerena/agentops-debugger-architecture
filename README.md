@@ -60,7 +60,7 @@ Retrieval is **hybrid**: a BM25 lexical index always runs; when `QWEN_EMBEDDING_
 - **Backend** (`apps/api`): Node/TypeScript on **Hono** (+ `@hono/node-server`) + **Mastra** agents (built on the Vercel AI SDK v5 → Qwen Cloud) behind a framework-agnostic, dependency-injected Coordinator engine + REST and streaming `/agent/*` endpoints. The orchestration core is testable with mocked agents (no live LLM); the manifest registry makes routing declarative data.
 - **Contracts** (`packages/shared`): zod schemas shared across boundaries (the single source of truth).
 - **Models:** Qwen Cloud via DashScope (OpenAI-compatible).
-- **Persistence:** Alibaba Cloud Tablestore (state, sessions, reports, ledger, cache, chunks, snapshots) + OSS (documents, exports).
+- **Persistence:** Alibaba Cloud Tablestore (sessions, reports, ledger, cache, chunks, snapshots) — exercised end-to-end. OSS is wired as a blob-storage seam (`OssBlobStore`) for documents/exports but not yet on the runtime path (report exports stream in-process today); see [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 - **Data:** OEFA Datos Abiertos (Junar API) + RUIAS CSV seed.
 
 ## Monorepo layout

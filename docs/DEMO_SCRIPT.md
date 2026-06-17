@@ -25,7 +25,7 @@ For the *live* recording, run the backend with the env from `DEPLOY.md` so
 > lets an analyst ask in plain Spanish and get an **evidence-cited** answer — and
 > it **shows its work**."
 
-**Show:** the Dashboard (`/`) — KPIs, charts, sessions table.
+**Show:** the **Panel** (`/`) — KPIs, charts, sessions table.
 
 ---
 
@@ -52,8 +52,8 @@ real OEFA Junar API.
 ### Scene 3 — Agent-driven canvas (1:00–1:25)
 
 **Show:** the agent's `uiActions` drive the **canvas** — it auto-opens the
-**Datos** tab and renders **Recharts** visuals (sanctions-by-year bars, status
-distribution, a timeline).
+**Datos OEFA** tab and renders charts (a **Recharts** sanctions-by-year bar chart
+plus a custom segmented status-distribution bar and a procedural timeline).
 
 > "The agent doesn't free-form-render UI — it picks from **audited components**
 > via a typed contract. Structured generative UI, safe for a regulatory domain."
@@ -77,7 +77,8 @@ distribution, a timeline).
 
 **Do:** click **PDF** (and mention DOCX/XLSX) to download the export.
 
-*Live:* the approved report + files persist to **Tablestore + OSS**.
+*Live:* the approved report persists to **Tablestore**; export files are
+generated on demand and streamed (OSS persistence is a planned follow-up).
 
 ---
 
@@ -97,13 +98,14 @@ reproduces exactly how the answer was built.
 ### Scene 6 — Cloud + close (2:45–3:00)
 
 **Show (live):** the Alibaba Cloud console — the **FC function / ECS instance**
-running it, rows in the **Tablestore** `agentops_kv` table, and the report file in
-the **OSS** bucket. Flash the three proof files: `qwen-provider.ts`,
-`tablestore-client.ts`, `oss-client.ts`.
+running it, and rows in the **Tablestore** `agentops_kv` table
+(sessions/reports/ledger/snapshots). Flash the proof files: `qwen-provider.ts`,
+`tablestore-client.ts`, `oss-client.ts` (Tablestore is exercised end-to-end; OSS
+is the wired blob seam).
 
-> "Qwen Cloud for reasoning, Alibaba Cloud Tablestore and OSS for durable state
-> and files — a transparent, evidence-first agent society for environmental
-> compliance. **Track 3.**"
+> "Qwen Cloud for reasoning, Alibaba Cloud Tablestore for durable state — a
+> transparent, evidence-first agent society for environmental compliance.
+> **Track 3.**"
 
 ---
 
