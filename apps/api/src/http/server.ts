@@ -10,7 +10,6 @@ import { streamSSE } from 'hono/streaming';
 import { z, ZodError } from 'zod';
 import { OEFA_DATASETS } from '../services/oefa/datasets.js';
 import { RecordFilterSchema } from '../services/oefa/oefa-service.js';
-import { exportReport } from '../services/report/export-report.js';
 import type { OnProgress } from '../orchestration/coordinator/types.js';
 import type { AppDeps } from './deps.js';
 
@@ -127,7 +126,9 @@ export function createServer(deps: AppDeps): Hono {
     }
     const report = await deps.reportStore.get(c.req.param('id'));
     if (!report) return c.json({ error: 'Informe no encontrado' }, 404);
-    const file = await exportReport(report, fmt);
+    // Renders the file and, for approved reports, persists/serves it via the blob
+    // store (OSS in live mode); see ReportExporter.
+    const file = await deps.reportExporter.export(report, fmt);
     return new Response(new Uint8Array(file.buffer), {
       status: 200,
       headers: {
