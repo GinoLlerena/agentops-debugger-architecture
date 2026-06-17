@@ -14,7 +14,7 @@ import {
   resolveManifestForTask,
 } from '../manifests/registry.js';
 import { applyEvidenceGuardrail, collectKnownEvidenceIds } from './guardrail.js';
-import { collectEvidence } from './snapshot.js';
+import { collectEvidence, UI_SUPPRESSED_KEY } from './snapshot.js';
 import type {
   Coordinator,
   CoordinatorDeps,
@@ -325,6 +325,9 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
   ): OrchestratorState {
     if (state.executionStatus !== 'failed') state.executionStatus = 'completed';
     state.pendingClarification = undefined; // terminal: no card to restore
+    // Persist the UI-suppression decision so a reopened cancelled/denied run
+    // doesn't resurface the draft report/charts the live run intentionally hid.
+    if (opts.suppressUi) state.workspace.sharedFacts[UI_SUPPRESSED_KEY] = true;
     const evidence = collectEvidence(state);
     const text = state.finalResponseDraft ?? defaultSummary(state);
     state.finalResponseDraft = text;

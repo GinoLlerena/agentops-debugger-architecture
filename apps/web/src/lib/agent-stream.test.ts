@@ -268,6 +268,18 @@ describe('hydrateChatState (rehydrate a reopened session)', () => {
     expect(st.requestedTab).toBe('informe');
   });
 
+  it('restores a failed run as an error bubble, not a success result', () => {
+    const st = hydrateChatState({
+      ...base,
+      status: 'failed',
+      userMessage: 'algo que falló',
+      finalText: 'No se pudo completar la consulta.',
+    } as SessionSnapshot);
+
+    expect(st.status).toBe('failed');
+    expect(st.messages.at(-1)!.kind).toBe('error');
+  });
+
   it('restores a waiting clarification card', () => {
     const st = hydrateChatState({
       ...base,

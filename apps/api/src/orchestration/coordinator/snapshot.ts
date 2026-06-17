@@ -10,6 +10,11 @@ import {
 /** Key under which {@link ingest} stashes the original request in sharedFacts. */
 const REQUEST_KEY = 'originalRequest';
 
+/** sharedFacts flag the coordinator sets when a run finalizes with the canvas UI
+ *  suppressed (a cancelled/denied side effect) — honored here so a reopened
+ *  cancelled run doesn't resurface the draft report/charts it hid. */
+export const UI_SUPPRESSED_KEY = 'uiSuppressed';
+
 /** A generic clarification for a session that was suspended before the prompt was
  *  persisted (pre-`pendingClarification` sessions) — degrades gracefully. */
 const FALLBACK_CLARIFICATION: ClarificationRequest = {
@@ -49,20 +54,26 @@ export function reportIdOf(state: OrchestratorState): string | undefined {
  */
 export function buildSessionSnapshot(state: OrchestratorState): SessionSnapshot {
   const request = state.workspace.sharedFacts[REQUEST_KEY] as { text?: string } | undefined;
-  const reportId = reportIdOf(state);
+  // Honor the live run's UI suppression (cancelled/denied side effect): hide the
+  // draft report + charts + tab switch exactly as finalize({suppressUi}) did.
+  const suppressed = state.workspace.sharedFacts[UI_SUPPRESSED_KEY] === true;
+  const reportId = suppressed ? undefined : reportIdOf(state);
   const base = {
     sessionId: state.sessionId,
     status: state.executionStatus,
     userMessage: request?.text ?? '',
     evidence: collectEvidence(state),
-    charts: collectCharts(state),
+    charts: suppressed ? [] : collectCharts(state),
     reportId,
   };
 
-  if (state.executionStatus === 'waiting' && state.interruptState) {
+  // A `waiting` run carries the pending HITL card. Tolerate a missing
+  // interruptState (corrupted/partial record) by degrading to a clarification so
+  // the session is never stuck without a way to act.
+  if (state.executionStatus === 'waiting') {
     const it = state.interruptState;
     const pending: SessionSnapshotPending =
-      it.reason === 'approval'
+      it?.reason === 'approval'
         ? {
             type: 'approval',
             interruptId: it.interruptId,

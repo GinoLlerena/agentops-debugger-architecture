@@ -281,8 +281,33 @@ describe('Session rehydrate — GET /sessions/:id/snapshot', () => {
     expect(snap.reportId).toBe(reportId);
   });
 
+  it('does not resurface the draft report after a cancelled run (suppressUi honored)', async () => {
+    const first = await readSSE(
+      await ask({ text: 'Genera un informe del RUC 20543210981', sessionId: 'snap-cancel' }),
+    );
+    expect(first.map((f) => f.event)).toContain('approval_required');
+    await readSSE(
+      await ask(
+        { sessionId: 'snap-cancel', resumption: { type: 'approval', approved: false } },
+        '/agent/ask/resume',
+      ),
+    );
+    const snap = (await (await app.request('/sessions/snap-cancel/snapshot')).json()) as {
+      status: string;
+      reportId?: string;
+      charts: unknown[];
+      finalText?: string;
+      pending?: unknown;
+    };
+    expect(snap.status).toBe('completed');
+    expect(snap.pending).toBeUndefined();
+    expect(snap.reportId).toBeUndefined(); // the hidden draft must not reappear
+    expect(snap.charts).toEqual([]);
+    expect(snap.finalText).toContain('cancel');
+  });
+
   it('returns 404 for an unknown session', async () => {
-    expect((await app.request('/sessions/nope/snapshot')).status).toBe(404);
+    expect((await app.request('/sessions/snap-unknown/snapshot')).status).toBe(404);
   });
 });
 

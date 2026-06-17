@@ -16,7 +16,7 @@ const SUGGESTIONS = [
 /** `sessionId` is a prop (the route wrapper keys the component by it) so each
  *  session gets a fresh hook instance with its own state. */
 export function Workspace({ sessionId }: { sessionId: string }) {
-  const { state, send, resume } = useAgentStream(sessionId);
+  const { state, send, resume, hydrating } = useAgentStream(sessionId);
   const [input, setInput] = useState('');
   const [evidence, setEvidence] = useState<EvidenceItem | null>(null);
   const [traceOpen, setTraceOpen] = useState(false);
@@ -29,7 +29,9 @@ export function Workspace({ sessionId }: { sessionId: string }) {
     .find((m) => m.kind === 'clarification' || m.kind === 'approval');
   const awaitingClarification = state.status === 'waiting' && pending?.kind === 'clarification';
   const awaitingApproval = state.status === 'waiting' && pending?.kind === 'approval';
-  const composerDisabled = busy || awaitingApproval; // approvals must use the buttons
+  // While rehydrating, keep the composer gated so a turn can't start against a
+  // `waiting` session before its HITL card is restored (would 409 and lose it).
+  const composerDisabled = busy || awaitingApproval || hydrating; // approvals must use the buttons
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
@@ -61,7 +63,9 @@ export function Workspace({ sessionId }: { sessionId: string }) {
         {/* Chat column */}
         <section className="flex w-[440px] flex-shrink-0 flex-col border-r border-linea bg-superficie">
           <div ref={scrollRef} className="flex-1 overflow-y-auto p-4">
-            {state.messages.length === 0 ? (
+            {hydrating && state.messages.length === 0 ? (
+              <p className="text-sm text-gris-ev">Cargando sesión…</p>
+            ) : state.messages.length === 0 ? (
               <div className="space-y-3">
                 <h2 className="text-xl font-semibold">¿Qué deseas investigar?</h2>
                 <p className="text-sm text-gris-ev">

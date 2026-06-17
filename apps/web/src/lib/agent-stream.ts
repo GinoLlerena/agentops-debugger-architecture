@@ -82,7 +82,13 @@ export function hydrateChatState(snap: SessionSnapshot): ChatState {
   if (snap.userMessage) messages.push({ id: nextId(), kind: 'user', text: snap.userMessage });
 
   if (snap.finalText) {
-    messages.push({ id: nextId(), kind: 'result', text: snap.finalText, evidence: snap.evidence });
+    // A failed run's final text is an error — render it red, matching how the
+    // live stream showed it (reduceEvent turns an `error` event into kind 'error').
+    messages.push(
+      snap.status === 'failed'
+        ? { id: nextId(), kind: 'error', message: snap.finalText }
+        : { id: nextId(), kind: 'result', text: snap.finalText, evidence: snap.evidence },
+    );
   }
   if (snap.pending?.type === 'clarification') {
     messages.push({
