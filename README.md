@@ -6,14 +6,18 @@
 
 ## Status
 
-🚧 In development.
+🚧 In development — runs **end-to-end offline today** (zero keys).
 
 - **Phase 0** — scaffold + shared zod contracts ✅
 - **Phase 1** — backend service foundations ✅ (Qwen provider, OEFA Junar client + normalizer + tools, storage ports with in-memory ⇄ Tablestore/OSS, RAG chunker + hybrid retriever, offline seed data)
 - **Phase 2** — orchestration core ✅ (manifest-driven routing, the Coordinator engine with evidence guardrail + HITL suspend/resume + MAX_TASK_STEPS, and the Mastra specialist agents + planner over Qwen)
 - **Phase 3** — API + persistence + first vertical slice ✅ (Hono server: streaming `/agent/*` with the typed event envelope, REST + `/trace/:sessionId`, durable suspend/resume, **Flow B grounded Q&A end-to-end**)
 - **Phase 4** — frontend workspace ✅ (React/Vite + TanStack Router/Query + Tailwind: the Workspace chat + canvas, evidence chips + drawer, the Trazabilidad trace sheet, and the dashboard — bound to the streaming `/agent/*` + REST)
-- **Next: Phase 5** — reports/exports, Recharts visualizations, eval metric, Alibaba Cloud deploy.
+- **Phase 5** — reports, visualizations & compliance 🚧
+  - **5A** agent-driven Recharts visualizations via typed `uiActions` ✅
+  - **5B** Flow A — report generation + HITL approval + report view ✅
+  - **5C** report export to PDF / DOCX / XLSX ✅
+  - **5D** compliance — [architecture diagram](docs/ARCHITECTURE.md), [Alibaba Cloud deploy checklist](docs/DEPLOY.md), [demo script](docs/DEMO_SCRIPT.md) ✅ *(credentialed deploy + demo recording pending)*
 
 ### Run the web app (against the offline API)
 
@@ -36,6 +40,15 @@ curl -N -X POST http://localhost:8787/agent/ask -H 'content-type: application/js
 
 With no keys it runs in **offline mode** (seed records, lexical RAG, no-LLM agents) — the full Flow B streams cited results. Set `DASHSCOPE_API_KEY` (+ `OEFA_API_KEY`) to switch to **live mode** (Mastra agents + Qwen, real OEFA API).
 
+### Deploy to Alibaba Cloud
+
+The same wiring goes **live** when credentials are present (`GET /health` then
+reports `mode: "live"`). See [`docs/DEPLOY.md`](docs/DEPLOY.md) for the full
+checklist (Qwen Cloud / DashScope, Tablestore, OSS, and Function Compute **or**
+ECS), [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the rendered architecture
+diagram, and [`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md) for the ~3-min demo
+walkthrough.
+
 See [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md) for the full phased plan and [`docs/VERIFY.md`](docs/VERIFY.md) for open items.
 
 ### RAG path
@@ -43,8 +56,8 @@ Retrieval is **hybrid**: a BM25 lexical index always runs; when `QWEN_EMBEDDING_
 
 ## Stack
 
-- **Frontend** (`apps/web`): React + Vite + TanStack Router/Query + Tailwind. A typed SSE client folds the streaming event envelope into chat state (custom client rather than CopilotKit, since `/agent/*` speaks our own typed contract). Recharts visualizations land in Phase 5.
-- **Backend** (`apps/api`): Node/TypeScript (Fastify/Hono) + **Mastra** agents (built on the Vercel AI SDK v5 → Qwen Cloud) behind a framework-agnostic, dependency-injected Coordinator engine + REST and streaming `/agent/*` endpoints. The orchestration core is testable with mocked agents (no live LLM); the manifest registry makes routing declarative data.
+- **Frontend** (`apps/web`): React + Vite + TanStack Router/Query + Tailwind + **Recharts**. A typed SSE client folds the streaming event envelope into chat state (custom client rather than CopilotKit, since `/agent/*` speaks our own typed contract); the agent drives the canvas (tabs + charts) through typed `uiActions`.
+- **Backend** (`apps/api`): Node/TypeScript on **Hono** (+ `@hono/node-server`) + **Mastra** agents (built on the Vercel AI SDK v5 → Qwen Cloud) behind a framework-agnostic, dependency-injected Coordinator engine + REST and streaming `/agent/*` endpoints. The orchestration core is testable with mocked agents (no live LLM); the manifest registry makes routing declarative data.
 - **Contracts** (`packages/shared`): zod schemas shared across boundaries (the single source of truth).
 - **Models:** Qwen Cloud via DashScope (OpenAI-compatible).
 - **Persistence:** Alibaba Cloud Tablestore (state, sessions, reports, ledger, cache, chunks, snapshots) + OSS (documents, exports).
