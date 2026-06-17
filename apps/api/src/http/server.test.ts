@@ -184,6 +184,32 @@ describe('Flow A — report generation with HITL approval', () => {
     expect(saved.status).toBe('approved');
   });
 
+  it('exports an approved report as a downloadable PDF', async () => {
+    const first = await readSSE(
+      await ask({ text: 'Genera un informe del RUC 20543210981', sessionId: 'flow-a-export' }),
+    );
+    const reportId = (first.find((f) => f.event === 'approval_required')!.data as {
+      payload: { reportPreviewId?: string };
+    }).payload.reportPreviewId!;
+    await readSSE(
+      await ask(
+        { sessionId: 'flow-a-export', resumption: { type: 'approval', approved: true } },
+        '/agent/ask/resume',
+      ),
+    );
+    const res = await app.request(`/reports/${reportId}/export/pdf`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('application/pdf');
+    expect(res.headers.get('content-disposition')).toContain('attachment');
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    expect(String.fromCharCode(...bytes.subarray(0, 4))).toBe('%PDF');
+  });
+
+  it('rejects an unsupported export format', async () => {
+    const res = await app.request('/reports/whatever/export/txt');
+    expect(res.status).toBe(400);
+  });
+
   it('does not persist-approve when the user cancels (and no tab yank)', async () => {
     const first = await readSSE(
       await ask({ text: 'Genera un informe del RUC 20543210981', sessionId: 'flow-a-cancel' }),
