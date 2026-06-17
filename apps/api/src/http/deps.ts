@@ -8,7 +8,7 @@ import {
   SeedRecordSource,
   type OefaRecordSource,
 } from '../services/oefa/oefa-service.js';
-import { InMemoryOefaCache } from '../services/oefa/oefa-cache.js';
+import { DocumentStoreOefaCache } from '../services/oefa/oefa-cache.js';
 import { loadSeedCorpus, RagService } from '../services/rag/index.js';
 import { maybeCreateEmbedder } from '../services/rag/embeddings.js';
 import { createQwenProvider } from '../services/qwen/qwen-provider.js';
@@ -45,7 +45,9 @@ export async function buildDeps(env: Env = getEnv()): Promise<AppDeps> {
   const source: OefaRecordSource = isOefaConfigured(env)
     ? new JunarRecordSource(new JunarClient(env))
     : new SeedRecordSource(RUIAS_SEED);
-  const oefa = new OefaService(source, new InMemoryOefaCache());
+  // Durable cache (FR-14): Tablestore in live mode, in-memory document store
+  // offline — survives restarts so cached OEFA data is served after a cold start.
+  const oefa = new OefaService(source, new DocumentStoreOefaCache(stores.documents));
 
   const rag = new RagService({ embedder: maybeCreateEmbedder(env) });
   await rag.indexDocuments(await loadSeedCorpus());
