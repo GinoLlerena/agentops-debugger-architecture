@@ -1,10 +1,28 @@
 import { useQuery } from '@tanstack/react-query';
-import type { LedgerEvent, OefaQueryResult, Report, Session } from '@agentops/shared';
+import {
+  SessionSnapshot,
+  type LedgerEvent,
+  type OefaQueryResult,
+  type Report,
+  type Session,
+} from '@agentops/shared';
 
 async function getJson<T>(path: string): Promise<T> {
   const res = await fetch(path);
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   return res.json() as Promise<T>;
+}
+
+/**
+ * Fetch the rehydration snapshot for a session. Returns null when the session
+ * doesn't exist yet (404 — a brand-new id) or the payload fails validation, so
+ * the Workspace simply starts blank instead of erroring.
+ */
+export async function fetchSessionSnapshot(sessionId: string): Promise<SessionSnapshot | null> {
+  const res = await fetch(`/sessions/${encodeURIComponent(sessionId)}/snapshot`);
+  if (!res.ok) return null;
+  const parsed = SessionSnapshot.safeParse(await res.json());
+  return parsed.success ? parsed.data : null;
 }
 
 export function useHealth() {

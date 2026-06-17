@@ -4,6 +4,7 @@ import {
   type EvidenceItem,
   type ExecutionStatus,
   type DomainTaskPacket,
+  type SessionSnapshot,
 } from '@agentops/shared';
 
 export type CanvasTab = 'resumen' | 'datos' | 'documentos' | 'informe';
@@ -68,6 +69,54 @@ export const initialChatState: ChatState = {
 
 let seq = 0;
 const nextId = (): string => `m${++seq}`;
+
+/**
+ * Build a ChatState from a persisted {@link SessionSnapshot}, so reopening a
+ * session restores the latest turn without re-running it. Mirrors the outcomes of
+ * {@link reduceEvent} for the user/result/approval/clarification messages, but
+ * folds a stored projection rather than a live stream — the per-task checklist is
+ * not restored (the Trazabilidad sheet reproduces the steps).
+ */
+export function hydrateChatState(snap: SessionSnapshot): ChatState {
+  const messages: ChatMessage[] = [];
+  if (snap.userMessage) messages.push({ id: nextId(), kind: 'user', text: snap.userMessage });
+
+  if (snap.finalText) {
+    messages.push({ id: nextId(), kind: 'result', text: snap.finalText, evidence: snap.evidence });
+  }
+  if (snap.pending?.type === 'clarification') {
+    messages.push({
+      id: nextId(),
+      kind: 'clarification',
+      question: snap.pending.request.question,
+      candidates: snap.pending.request.candidates,
+    });
+  } else if (snap.pending?.type === 'approval') {
+    messages.push({
+      id: nextId(),
+      kind: 'approval',
+      interruptId: snap.pending.interruptId,
+      description: snap.pending.description,
+      reportPreviewId: snap.pending.reportPreviewId,
+    });
+  }
+
+  const requestedTab: CanvasTab | undefined = snap.reportId
+    ? 'informe'
+    : snap.charts.length > 0
+      ? 'datos'
+      : undefined;
+
+  return {
+    sessionId: snap.sessionId,
+    status: snap.status,
+    messages,
+    evidence: snap.evidence,
+    charts: snap.charts,
+    requestedTab,
+    reportId: snap.reportId,
+  };
+}
 
 /** Update the most recent plan message's task rows immutably. */
 function patchLastPlan(

@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { ExecutionStatus, Id, IsoTimestamp } from './common.js';
 import { ArtifactRecord } from './evidence.js';
 import { LedgerEvent } from './ledger.js';
-import { DomainTaskPacket, DomainTaskResult } from './tasks.js';
+import { ClarificationRequest, DomainTaskPacket, DomainTaskResult } from './tasks.js';
 
 /** Structured conversation memory (architecture §11.1) — so long sessions
  *  reconstruct without replaying the whole transcript. */
@@ -61,6 +61,11 @@ export const OrchestratorState = z.object({
   ledger: z.array(LedgerEvent).default([]),
 
   interruptState: InterruptState.optional(),
+  // The clarification prompt (question + candidates) that produced the current
+  // suspension, persisted so a reopened session can re-render the card — the
+  // durable state is the single source of truth (§11.1), not the transient
+  // stream. Cleared whenever the interrupt is lifted or the run finalizes.
+  pendingClarification: ClarificationRequest.optional(),
   finalResponseDraft: z.string().optional(),
 });
 export type OrchestratorState = z.infer<typeof OrchestratorState>;

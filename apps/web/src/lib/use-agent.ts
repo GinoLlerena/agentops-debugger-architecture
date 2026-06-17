@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Resumption } from '@agentops/shared';
-import { initialChatState, reduceEvent, streamAgent, type ChatState } from './agent-stream.js';
+import { fetchSessionSnapshot } from './api.js';
+import {
+  hydrateChatState,
+  initialChatState,
+  reduceEvent,
+  streamAgent,
+  type ChatState,
+} from './agent-stream.js';
 
 let userSeq = 0;
 
@@ -17,6 +24,23 @@ export function useAgentStream(sessionId: string) {
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => () => abortRef.current?.abort(), []);
+
+  // Rehydrate a reopened session once on mount: restore the latest turn from the
+  // persisted snapshot so the Workspace isn't blank. Skip if a run already
+  // started (busy) or any message exists — never clobber live/typed state.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const snap = await fetchSessionSnapshot(sessionId).catch(() => null);
+      if (cancelled || !snap || busyRef.current) return;
+      setState((prev) =>
+        prev.messages.length === 0 && prev.status === 'idle' ? hydrateChatState(snap) : prev,
+      );
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId]);
 
   const onEvent = useCallback((e: Parameters<typeof reduceEvent>[1]) => {
     setState((prev) => reduceEvent(prev, e));

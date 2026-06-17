@@ -233,6 +233,59 @@ describe('Flow A — report generation with HITL approval', () => {
   });
 });
 
+describe('Session rehydrate — GET /sessions/:id/snapshot', () => {
+  it('projects a completed Flow B run (question + final answer + evidence)', async () => {
+    await readSSE(
+      await ask({ text: 'Antecedentes del administrado con RUC 20543210981', sessionId: 'snap-done' }),
+    );
+    const snap = (await (await app.request('/sessions/snap-done/snapshot')).json()) as {
+      status: string;
+      userMessage: string;
+      finalText?: string;
+      evidence: unknown[];
+      pending?: unknown;
+    };
+    expect(snap.status).toBe('completed');
+    expect(snap.userMessage).toContain('20543210981');
+    expect(snap.finalText && snap.finalText.length).toBeGreaterThan(0);
+    expect(snap.evidence.length).toBeGreaterThan(0);
+    expect(snap.pending).toBeUndefined();
+  });
+
+  it('projects a waiting clarification (the card survives a reopen)', async () => {
+    await readSSE(await ask({ text: 'sanciones de bambas', sessionId: 'snap-clar' }));
+    const snap = (await (await app.request('/sessions/snap-clar/snapshot')).json()) as {
+      status: string;
+      pending?: { type: string; request?: { question: string; candidates: unknown[] } };
+    };
+    expect(snap.status).toBe('waiting');
+    expect(snap.pending?.type).toBe('clarification');
+    expect(snap.pending?.request?.candidates.length).toBeGreaterThan(1);
+  });
+
+  it('projects a waiting approval with the drafted report id', async () => {
+    const first = await readSSE(
+      await ask({ text: 'Genera un informe del RUC 20543210981', sessionId: 'snap-appr' }),
+    );
+    const reportId = (first.find((f) => f.event === 'approval_required')!.data as {
+      payload: { reportPreviewId?: string };
+    }).payload.reportPreviewId;
+    const snap = (await (await app.request('/sessions/snap-appr/snapshot')).json()) as {
+      status: string;
+      reportId?: string;
+      pending?: { type: string; reportPreviewId?: string };
+    };
+    expect(snap.status).toBe('waiting');
+    expect(snap.pending?.type).toBe('approval');
+    expect(snap.pending?.reportPreviewId).toBe(reportId);
+    expect(snap.reportId).toBe(reportId);
+  });
+
+  it('returns 404 for an unknown session', async () => {
+    expect((await app.request('/sessions/nope/snapshot')).status).toBe(404);
+  });
+});
+
 describe('REST endpoints', () => {
   it('GET /oefa/datasets lists the verified datasets', async () => {
     const body = (await (await app.request('/oefa/datasets')).json()) as { datasets: unknown[] };
