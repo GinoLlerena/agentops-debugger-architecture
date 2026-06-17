@@ -10,6 +10,7 @@ import { streamSSE } from 'hono/streaming';
 import { z, ZodError } from 'zod';
 import { OEFA_DATASETS } from '../services/oefa/datasets.js';
 import { RecordFilterSchema } from '../services/oefa/oefa-service.js';
+import { exportReport } from '../services/report/export-report.js';
 import type { OnProgress } from '../orchestration/coordinator/types.js';
 import type { AppDeps } from './deps.js';
 
@@ -118,6 +119,22 @@ export function createServer(deps: AppDeps): Hono {
   app.get('/reports/:id', async (c) => {
     const report = await deps.reportStore.get(c.req.param('id'));
     return report ? c.json(report) : c.json({ error: 'Informe no encontrado' }, 404);
+  });
+  app.get('/reports/:id/export/:fmt', async (c) => {
+    const fmt = c.req.param('fmt');
+    if (fmt !== 'pdf' && fmt !== 'docx' && fmt !== 'xlsx') {
+      return c.json({ error: 'Formato no soportado' }, 400);
+    }
+    const report = await deps.reportStore.get(c.req.param('id'));
+    if (!report) return c.json({ error: 'Informe no encontrado' }, 404);
+    const file = await exportReport(report, fmt);
+    return new Response(new Uint8Array(file.buffer), {
+      status: 200,
+      headers: {
+        'Content-Type': file.contentType,
+        'Content-Disposition': `attachment; filename="${file.filename}"`,
+      },
+    });
   });
 
   // ── sessions ──────────────────────────────────────────────────────────────

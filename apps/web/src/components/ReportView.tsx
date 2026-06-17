@@ -52,6 +52,19 @@ export function ReportView({
           {report.subjectEntity.ruc ? ` · RUC ${report.subjectEntity.ruc}` : ''} · emitido{' '}
           {report.issueDate}
         </p>
+        <div className="mt-2 flex items-center gap-2">
+          <span className="eyebrow">Exportar:</span>
+          {(['pdf', 'docx', 'xlsx'] as const).map((fmt) => (
+            <a
+              key={fmt}
+              href={`/reports/${report.id}/export/${fmt}`}
+              download
+              className="rounded-chip border border-linea px-2 py-0.5 text-2xs font-semibold text-verde-tinta hover:bg-papel"
+            >
+              {fmt.toUpperCase()}
+            </a>
+          ))}
+        </div>
       </header>
 
       {/* Resumen ejecutivo */}
