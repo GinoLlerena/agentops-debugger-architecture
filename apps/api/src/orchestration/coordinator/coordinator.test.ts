@@ -8,6 +8,7 @@ import type {
 } from '@agentops/shared';
 import { AGENT_IDS } from '../manifests/registry.js';
 import { createCoordinator } from './coordinator.js';
+import { buildSessionSnapshot } from './snapshot.js';
 import type { AgentMap, Planner, PlanResult, SpecialistAgent } from './types.js';
 
 // ── test helpers ──────────────────────────────────────────────────────────────
@@ -165,6 +166,17 @@ describe('Coordinator — happy path', () => {
     expect(state.executionStatus).toBe('completed');
     expect(state.finalResponseDraft).toContain('No encontré evidencia');
     expect(state.completedTasks).toHaveLength(0);
+  });
+
+  it('threads the request language into state and the session snapshot', async () => {
+    const coord = createCoordinator({
+      planner: staticPlanner({ kind: 'reply', text: 'ok' }),
+      agents: {},
+      ...deterministic,
+    });
+    const state = await coord.start({ text: 'q', sessionId: 's1', language: 'en', requestContext: {} });
+    expect(state.language).toBe('en');
+    expect(buildSessionSnapshot(state).language).toBe('en');
   });
 });
 

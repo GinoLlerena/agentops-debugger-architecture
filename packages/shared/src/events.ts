@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ExecutionStatus, Id } from './common.js';
+import { ExecutionStatus, Id, Language, DEFAULT_LANGUAGE } from './common.js';
 import { ArtifactRecord, EvidenceItem } from './evidence.js';
 import { ClarificationRequest, DomainTaskPacket } from './tasks.js';
 
@@ -10,6 +10,9 @@ import { ClarificationRequest, DomainTaskPacket } from './tasks.js';
 export const NormalizedUserRequest = z.object({
   text: z.string(),
   sessionId: Id.optional(), // omitted → new session
+  // Presentation language for the response (search, narrative, citations).
+  // Defaults to Spanish (the canonical source language) when omitted.
+  language: Language.default(DEFAULT_LANGUAGE),
   requestContext: z.record(z.unknown()).default({}), // e.g. seeded alert context
 });
 export type NormalizedUserRequest = z.infer<typeof NormalizedUserRequest>;

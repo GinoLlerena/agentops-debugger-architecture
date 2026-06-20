@@ -1,6 +1,11 @@
 import { useEffect, type ReactNode } from 'react';
+import { RISK_SEVERITY_LABELS, WARNING_SEVERITY_LABELS, localizeLabel } from '@agentops/shared';
+import { useI18n } from '../i18n/index.js';
 
 /** Minimal shadcn-style primitives styled with the project tokens (UX §8). */
+
+/** Localized label for any severity value (warning or risk scale share values). */
+const SEVERITY_LABELS = { ...RISK_SEVERITY_LABELS, ...WARNING_SEVERITY_LABELS };
 
 export function Button({
   children,
@@ -56,15 +61,18 @@ const SEVERITY_STYLES: Record<string, string> = {
   Crítica: 'bg-[#FBE3E1] text-rojo',
 };
 
-/** Severity is never color-only — always icon + label (UX §6.2, accessibility). */
+/** Severity is never color-only — always icon + label (UX §6.2, accessibility).
+ *  `level` is the stored Spanish value; styles/icon key off it, the label is
+ *  localized for display. */
 export function SeverityTag({ level }: { level: string }) {
+  const { language } = useI18n();
   const icon = level === 'Crítica' ? '!' : level === 'Alta' || level === 'Advertencia' ? '▲' : '●';
   return (
     <span
       className={`inline-flex items-center gap-1 rounded-chip px-1.5 py-0.5 text-2xs font-semibold ${SEVERITY_STYLES[level] ?? 'bg-papel text-gris-ev'}`}
     >
       <span aria-hidden>{icon}</span>
-      {level}
+      {localizeLabel(SEVERITY_LABELS, level, language)}
     </span>
   );
 }
@@ -83,6 +91,7 @@ export function Sheet({
   width?: number;
   children: ReactNode;
 }) {
+  const { t } = useI18n();
   // Esc closes the sheet regardless of where focus sits (a panel-level keydown
   // would never fire since focus stays on the trigger/body).
   useEffect(() => {
@@ -104,7 +113,7 @@ export function Sheet({
       >
         <div className="flex items-center justify-between border-b border-linea px-4 py-3">
           <h2 className="text-lg font-semibold">{title}</h2>
-          <Button variant="ghost" onClick={onClose} title="Cerrar">
+          <Button variant="ghost" onClick={onClose} title={t('ui.close')}>
             ✕
           </Button>
         </div>

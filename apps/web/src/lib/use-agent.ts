@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Resumption } from '@agentops/shared';
+import { useI18n } from '../i18n/index.js';
 import { fetchSessionSnapshot } from './api.js';
 import {
   hydrateChatState,
@@ -19,6 +20,7 @@ let userSeq = 0;
  * stream or setState into an unmounted component.
  */
 export function useAgentStream(sessionId: string) {
+  const { language } = useI18n();
   const [state, setState] = useState<ChatState>({ ...initialChatState, sessionId });
   // True until the initial rehydration fetch settles — the UI shows a loader
   // instead of the blank new-session screen, so a reopened session never flashes
@@ -83,9 +85,9 @@ export function useAgentStream(sessionId: string) {
         ...prev,
         messages: [...prev.messages, { id: `u${++userSeq}`, kind: 'user', text }],
       }));
-      await run('/agent/ask', { text, sessionId });
+      await run('/agent/ask', { text, sessionId, language });
     },
-    [run, sessionId],
+    [run, sessionId, language],
   );
 
   const resume = useCallback(

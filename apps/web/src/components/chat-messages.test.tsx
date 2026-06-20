@@ -1,9 +1,14 @@
 import { fireEvent, render, screen } from '@testing-library/react';
+import type { ReactElement } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import type { ChatMessage } from '../lib/agent-stream.js';
+import { I18nProvider } from '../i18n/index.js';
 import { ChatThread } from './chat-messages.js';
 
 const noop = { onOpenEvidence: vi.fn(), onResume: vi.fn(), busy: false };
+
+/** Components use `useI18n`, so every render needs the provider (defaults to es). */
+const renderUI = (ui: ReactElement) => render(<I18nProvider>{ui}</I18nProvider>);
 
 describe('ChatThread', () => {
   it('renders a plan checklist, a result, and evidence chips', () => {
@@ -22,7 +27,7 @@ describe('ChatThread', () => {
         evidence: [{ id: 'E', documentTitle: 'Res. 1', passage: 'p', confidence: 'directa' }],
       },
     ];
-    render(<ChatThread messages={messages} handlers={noop} />);
+    renderUI(<ChatThread messages={messages} handlers={noop} />);
     expect(screen.getByText('Combino datos con documentos.')).toBeInTheDocument();
     expect(screen.getByText('Datos OEFA')).toBeInTheDocument();
     expect(screen.getByText('8 sanciones firmes.')).toBeInTheDocument();
@@ -39,7 +44,7 @@ describe('ChatThread', () => {
         candidates: [{ id: 'c1', label: 'Minera Las Bambas', ruc: '20543210981' }],
       },
     ];
-    render(<ChatThread messages={messages} handlers={{ ...noop, onResume }} />);
+    renderUI(<ChatThread messages={messages} handlers={{ ...noop, onResume }} />);
     fireEvent.click(screen.getByText('Minera Las Bambas'));
     expect(onResume).toHaveBeenCalledWith({ type: 'clarification', answer: '20543210981' });
   });
@@ -54,7 +59,7 @@ describe('ChatThread', () => {
         candidates: [{ id: 'c1', label: 'Minería' }],
       },
     ];
-    render(<ChatThread messages={messages} handlers={{ ...noop, onResume }} />);
+    renderUI(<ChatThread messages={messages} handlers={{ ...noop, onResume }} />);
     fireEvent.click(screen.getByText('Minería'));
     expect(onResume).toHaveBeenCalledWith({ type: 'clarification', answer: 'Minería' });
   });
@@ -64,7 +69,7 @@ describe('ChatThread', () => {
     const messages: ChatMessage[] = [
       { id: 'a1', kind: 'approval', interruptId: 'i1', description: 'Guardar informe' },
     ];
-    render(<ChatThread messages={messages} handlers={{ ...noop, onResume }} />);
+    renderUI(<ChatThread messages={messages} handlers={{ ...noop, onResume }} />);
     fireEvent.click(screen.getByText('Aprobar y guardar informe'));
     expect(onResume).toHaveBeenCalledWith({ type: 'approval', approved: true });
   });

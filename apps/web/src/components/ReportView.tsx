@@ -1,4 +1,5 @@
 import type { EvidenceItem, Report } from '@agentops/shared';
+import { useI18n } from '../i18n/index.js';
 import { EvidenceChip } from './evidence.js';
 import { SeverityTag } from './ui.js';
 
@@ -16,6 +17,7 @@ export function ReportView({
   evidence: EvidenceItem[];
   onOpenEvidence: (item: EvidenceItem) => void;
 }) {
+  const { t } = useI18n();
   const evById = new Map(evidence.map((e) => [e.id, e]));
   const labelOf = (id: string) => {
     const idx = evidence.findIndex((e) => e.id === id);
@@ -40,7 +42,7 @@ export function ReportView({
                 : 'bg-papel text-gris-ev'
             }`}
           >
-            {report.status === 'approved' ? 'Aprobado' : 'Borrador'}
+            {report.status === 'approved' ? t('report.approved') : t('report.draft')}
           </span>
           {report.confidentialityLabel && (
             <span className="ml-auto eyebrow">{report.confidentialityLabel}</span>
@@ -49,11 +51,11 @@ export function ReportView({
         <h1 className="mt-1 text-xl font-semibold">{report.title}</h1>
         <p className="mono text-2xs text-gris-ev">
           {report.subjectEntity.name}
-          {report.subjectEntity.ruc ? ` · RUC ${report.subjectEntity.ruc}` : ''} · emitido{' '}
-          {report.issueDate}
+          {report.subjectEntity.ruc ? ` · RUC ${report.subjectEntity.ruc}` : ''} ·{' '}
+          {t('report.issued', { date: report.issueDate })}
         </p>
         <div className="mt-2 flex items-center gap-2">
-          <span className="eyebrow">Exportar:</span>
+          <span className="eyebrow">{t('report.export')}</span>
           {(['pdf', 'docx', 'xlsx'] as const).map((fmt) => (
             <a
               key={fmt}
@@ -68,9 +70,9 @@ export function ReportView({
       </header>
 
       {/* Resumen ejecutivo */}
-      <Section title="Resumen ejecutivo">
+      <Section title={t('report.execSummary')}>
         <div className="flex items-center gap-2">
-          <span>Nivel de riesgo:</span>
+          <span>{t('report.riskLevel')}</span>
           <SeverityTag level={report.executiveSummary.riskLevel} />
         </div>
         <ul className="mt-1.5 list-disc space-y-1 pl-5">
@@ -81,7 +83,7 @@ export function ReportView({
       </Section>
 
       {/* Hallazgos */}
-      <Section title="Hallazgos">
+      <Section title={t('report.findings')}>
         <ol className="space-y-2">
           {report.findings.map((f) => (
             <li key={f.id}>
@@ -93,7 +95,7 @@ export function ReportView({
 
       {/* Advertencias */}
       {report.warnings.length > 0 && (
-        <Section title="Advertencias">
+        <Section title={t('report.warnings')}>
           <ul className="space-y-1.5">
             {report.warnings.map((w) => (
               <li key={w.id} className="flex items-start gap-2">
@@ -108,19 +110,21 @@ export function ReportView({
       )}
 
       {/* Recomendaciones */}
-      <Section title="Recomendaciones">
+      <Section title={t('report.recommendations')}>
         <ol className="space-y-1.5">
           {report.recommendations.map((r) => (
             <li key={r.id}>
               {r.text}
-              <span className="block text-xs text-gris-ev">Fundamento: {r.rationale}</span>
+              <span className="block text-xs text-gris-ev">
+                {t('report.rationale')} {r.rationale}
+              </span>
             </li>
           ))}
         </ol>
       </Section>
 
       {/* Anexo de fuentes */}
-      <Section title="Anexo de fuentes y metodología">
+      <Section title={t('report.sourcesAnnex')}>
         <ul className="mono space-y-0.5 text-2xs text-gris-ev">
           {report.sourcesAnnex.documents.map((d, i) => (
             <li key={`d${i}`}>· {d}</li>
@@ -128,7 +132,7 @@ export function ReportView({
           {report.sourcesAnnex.apiQueries.map((q, i) => (
             <li key={`q${i}`}>· {q}</li>
           ))}
-          <li>· Consultado: {report.sourcesAnnex.consultationDates.join(', ')}</li>
+          <li>· {t('report.consulted')} {report.sourcesAnnex.consultationDates.join(', ')}</li>
         </ul>
       </Section>
 

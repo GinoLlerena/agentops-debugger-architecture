@@ -1,5 +1,6 @@
 import type { EvidenceItem, Resumption } from '@agentops/shared';
 import type { ChatMessage, TaskRow } from '../lib/agent-stream.js';
+import { useI18n } from '../i18n/index.js';
 import { EvidenceChip } from './evidence.js';
 import { Button, Card, CardHeader, Eyebrow, Spinner } from './ui.js';
 
@@ -26,6 +27,7 @@ export function ChatThread({
 }
 
 function Message({ message, handlers }: { message: ChatMessage; handlers: Handlers }) {
+  const { t } = useI18n();
   switch (message.kind) {
     case 'user':
       return (
@@ -39,7 +41,7 @@ function Message({ message, handlers }: { message: ChatMessage; handlers: Handle
       return (
         <Card>
           <CardHeader>
-            <Eyebrow>Aclaración</Eyebrow>
+            <Eyebrow>{t('chat.clarification')}</Eyebrow>
           </CardHeader>
           <div className="space-y-2 p-3">
             <p className="text-sm">{message.question}</p>
@@ -65,7 +67,7 @@ function Message({ message, handlers }: { message: ChatMessage; handlers: Handle
       return (
         <Card>
           <CardHeader>
-            <Eyebrow>Aprobación requerida</Eyebrow>
+            <Eyebrow>{t('chat.approvalRequired')}</Eyebrow>
           </CardHeader>
           <div className="space-y-3 p-3">
             <p className="text-sm">{message.description}</p>
@@ -75,13 +77,13 @@ function Message({ message, handlers }: { message: ChatMessage; handlers: Handle
                 disabled={handlers.busy}
                 onClick={() => handlers.onResume({ type: 'approval', approved: true })}
               >
-                Aprobar y guardar informe
+                {t('chat.approve')}
               </Button>
               <Button
                 disabled={handlers.busy}
                 onClick={() => handlers.onResume({ type: 'approval', approved: false })}
               >
-                Cancelar
+                {t('chat.cancel')}
               </Button>
             </div>
           </div>
@@ -94,13 +96,13 @@ function Message({ message, handlers }: { message: ChatMessage; handlers: Handle
             <span aria-hidden className="text-verde-fiscal">
               ✔
             </span>
-            <Eyebrow>Resumen</Eyebrow>
+            <Eyebrow>{t('chat.summary')}</Eyebrow>
           </CardHeader>
           <div className="space-y-2 p-3">
             <p className="text-sm leading-relaxed">{message.text}</p>
             {message.evidence.length > 0 && (
               <div className="flex flex-wrap items-center gap-1 border-t border-linea pt-2 text-xs text-gris-ev">
-                <span>Fuentes:</span>
+                <span>{t('chat.sources')}</span>
                 {message.evidence.map((e, i) => (
                   <EvidenceChip
                     key={e.id}
@@ -138,17 +140,18 @@ const STATUS_ICON: Record<TaskRow['status'], string> = {
 };
 
 function PlanChecklist({ reasoning, tasks }: { reasoning: string; tasks: TaskRow[] }) {
-  const active = tasks.some((t) => t.status === 'running' || t.status === 'pending');
-  const anyFailed = tasks.some((t) => t.status === 'failed');
-  const settled = tasks.filter((t) => t.status === 'done' || t.status === 'failed' || t.status === 'skipped').length;
+  const { t } = useI18n();
+  const active = tasks.some((task) => task.status === 'running' || task.status === 'pending');
+  const anyFailed = tasks.some((task) => task.status === 'failed');
+  const settled = tasks.filter((task) => task.status === 'done' || task.status === 'failed' || task.status === 'skipped').length;
   const headerIcon = active ? (
     <Spinner />
   ) : anyFailed ? (
-    <span className="text-ambar" aria-label="con errores">
+    <span className="text-ambar" aria-label={t('chat.ariaErrors')}>
       ⚠
     </span>
   ) : (
-    <span className="text-verde-fiscal" aria-label="completado">
+    <span className="text-verde-fiscal" aria-label={t('chat.ariaDone')}>
       ✔
     </span>
   );
@@ -156,9 +159,9 @@ function PlanChecklist({ reasoning, tasks }: { reasoning: string; tasks: TaskRow
     <Card>
       <CardHeader>
         {headerIcon}
-        <Eyebrow>Plan</Eyebrow>
+        <Eyebrow>{t('chat.plan')}</Eyebrow>
         <span className="ml-auto mono text-2xs text-gris-ev">
-          {settled} de {tasks.length}
+          {t('chat.planCount', { settled, total: tasks.length })}
         </span>
       </CardHeader>
       <div className="space-y-2 p-3">
@@ -166,26 +169,26 @@ function PlanChecklist({ reasoning, tasks }: { reasoning: string; tasks: TaskRow
           {reasoning}
         </p>
         <ol className="space-y-1.5" aria-live="polite">
-          {tasks.map((t) => (
-            <li key={t.taskId} className="flex items-start gap-2 text-sm">
+          {tasks.map((task) => (
+            <li key={task.taskId} className="flex items-start gap-2 text-sm">
               <span
                 aria-hidden
                 className={
-                  t.status === 'running'
+                  task.status === 'running'
                     ? 'text-azul-dato'
-                    : t.status === 'done'
+                    : task.status === 'done'
                       ? 'text-verde-fiscal'
-                      : t.status === 'failed'
+                      : task.status === 'failed'
                         ? 'text-ambar'
                         : 'text-gris-ev'
                 }
               >
-                {STATUS_ICON[t.status]}
+                {STATUS_ICON[task.status]}
               </span>
               <span className="flex-1">
-                <span className="font-semibold">{t.title}</span>
-                {(t.caption || t.result) && (
-                  <span className="block text-xs text-gris-ev">{t.result ?? t.caption}</span>
+                <span className="font-semibold">{task.title}</span>
+                {(task.caption || task.result) && (
+                  <span className="block text-xs text-gris-ev">{task.result ?? task.caption}</span>
                 )}
               </span>
             </li>

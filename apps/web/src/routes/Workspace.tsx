@@ -1,4 +1,4 @@
-import type { EvidenceItem } from '@agentops/shared';
+import type { EvidenceItem, ExecutionStatus } from '@agentops/shared';
 import { useEffect, useRef, useState } from 'react';
 import { Canvas } from '../components/Canvas.js';
 import { ChatThread } from '../components/chat-messages.js';
@@ -6,17 +6,19 @@ import { EvidenceDrawer } from '../components/evidence.js';
 import { TraceSheet } from '../components/TraceSheet.js';
 import { Button } from '../components/ui.js';
 import { useAgentStream } from '../lib/use-agent.js';
+import { useI18n, type MessageKey } from '../i18n/index.js';
 
-const SUGGESTIONS = [
-  'Genera un informe de antecedentes del RUC 20543210981',
-  'Antecedentes del administrado con RUC 20543210981',
-  '¿Qué sanciones tiene bambas?',
+const SUGGESTION_KEYS: MessageKey[] = [
+  'workspace.suggestion1',
+  'workspace.suggestion2',
+  'workspace.suggestion3',
 ];
 
 /** `sessionId` is a prop (the route wrapper keys the component by it) so each
  *  session gets a fresh hook instance with its own state. */
 export function Workspace({ sessionId }: { sessionId: string }) {
   const { state, send, resume, hydrating } = useAgentStream(sessionId);
+  const { t } = useI18n();
   const [input, setInput] = useState('');
   const [evidence, setEvidence] = useState<EvidenceItem | null>(null);
   const [traceOpen, setTraceOpen] = useState(false);
@@ -50,11 +52,11 @@ export function Workspace({ sessionId }: { sessionId: string }) {
     <div className="flex h-full flex-col">
       <div className="flex h-13 flex-shrink-0 items-center gap-3 border-b border-linea bg-superficie px-4">
         <span className="h-2 w-2 rounded-full bg-azul-dato" aria-hidden />
-        <span className="text-sm font-semibold">Investigación · {sessionId}</span>
-        <span className="eyebrow">{statusLabel(state.status)}</span>
+        <span className="text-sm font-semibold">{t('workspace.header', { id: sessionId })}</span>
+        <span className="eyebrow">{t(statusKey(state.status))}</span>
         <div className="ml-auto flex gap-2">
-          <Button onClick={() => setTraceOpen(true)} title="¿Cómo se construyó esta respuesta?">
-            Trazabilidad
+          <Button onClick={() => setTraceOpen(true)} title={t('workspace.traceTitle')}>
+            {t('workspace.trace')}
           </Button>
         </div>
       </div>
@@ -64,21 +66,19 @@ export function Workspace({ sessionId }: { sessionId: string }) {
         <section className="flex w-[440px] flex-shrink-0 flex-col border-r border-linea bg-superficie">
           <div ref={scrollRef} className="flex-1 overflow-y-auto p-4">
             {hydrating && state.messages.length === 0 ? (
-              <p className="text-sm text-gris-ev">Cargando sesión…</p>
+              <p className="text-sm text-gris-ev">{t('workspace.loadingSession')}</p>
             ) : state.messages.length === 0 ? (
               <div className="space-y-3">
-                <h2 className="text-xl font-semibold">¿Qué deseas investigar?</h2>
-                <p className="text-sm text-gris-ev">
-                  Pregunta en lenguaje natural sobre administrados, sanciones y resoluciones de OEFA.
-                </p>
+                <h2 className="text-xl font-semibold">{t('workspace.emptyHeading')}</h2>
+                <p className="text-sm text-gris-ev">{t('workspace.emptyDesc')}</p>
                 <div className="space-y-1.5">
-                  {SUGGESTIONS.map((s) => (
+                  {SUGGESTION_KEYS.map((key) => (
                     <button
-                      key={s}
-                      onClick={() => void send(s)}
+                      key={key}
+                      onClick={() => void send(t(key))}
                       className="block w-full rounded-card border border-linea px-3 py-2 text-left text-sm hover:bg-papel"
                     >
-                      {s}
+                      {t(key)}
                     </button>
                   ))}
                 </div>
@@ -101,16 +101,16 @@ export function Workspace({ sessionId }: { sessionId: string }) {
                 disabled={composerDisabled}
                 placeholder={
                   awaitingApproval
-                    ? 'Usa los botones de aprobación arriba…'
+                    ? t('workspace.placeholder.approval')
                     : awaitingClarification
-                      ? 'Responde la aclaración…'
-                      : 'Escribe tu consulta…'
+                      ? t('workspace.placeholder.clarification')
+                      : t('workspace.placeholder.default')
                 }
-                aria-label="Consulta"
+                aria-label={t('workspace.inputAria')}
                 className="flex-1 bg-transparent text-sm outline-none disabled:opacity-50"
               />
               <Button variant="primary" onClick={submit} disabled={composerDisabled || !input.trim()}>
-                Enviar
+                {t('workspace.send')}
               </Button>
             </div>
           </div>
@@ -128,14 +128,15 @@ export function Workspace({ sessionId }: { sessionId: string }) {
   );
 }
 
-function statusLabel(status: string): string {
-  return (
-    {
-      idle: 'Lista',
-      running: 'Investigando…',
-      waiting: 'Esperando tu respuesta',
-      completed: 'Completado',
-      failed: 'Con errores',
-    }[status] ?? status
-  );
+/** Typed map so adding an ExecutionStatus without a catalog key is a compile error. */
+const STATUS_KEYS: Record<ExecutionStatus | 'idle', MessageKey> = {
+  idle: 'status.idle',
+  running: 'status.running',
+  waiting: 'status.waiting',
+  completed: 'status.completed',
+  failed: 'status.failed',
+};
+
+function statusKey(status: ExecutionStatus | 'idle'): MessageKey {
+  return STATUS_KEYS[status];
 }
