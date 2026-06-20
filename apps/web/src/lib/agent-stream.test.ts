@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import type { StreamEvent } from '@agentops/shared';
-import { initialChatState, parseSSEBuffer, reduceEvent, type ChatState } from './agent-stream.js';
+import type { SessionSnapshot, StreamEvent } from '@agentops/shared';
+import {
+  hydrateChatState,
+  initialChatState,
+  parseSSEBuffer,
+  reduceEvent,
+  type ChatState,
+} from './agent-stream.js';
 
 const sse = (event: StreamEvent): string =>
   `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`;
@@ -227,5 +233,66 @@ describe('reduceEvent — terminal + branches', () => {
       },
     ]);
     expect(state.charts).toEqual([]);
+  });
+});
+
+describe('hydrateChatState (rehydrate a reopened session)', () => {
+  const base = { sessionId: 's1', evidence: [], charts: [] };
+
+  it('restores a completed turn: user question + final answer', () => {
+    const st = hydrateChatState({
+      ...base,
+      status: 'completed',
+      userMessage: 'antecedentes RUC 20543210981',
+      evidence: [{ id: 'OEFA:r1', documentTitle: 'Res. 1', passage: 'p', confidence: 'directa' }],
+      finalText: 'La empresa registra 3 sanciones.',
+    } as SessionSnapshot);
+
+    expect(st.status).toBe('completed');
+    expect(st.messages.map((m) => m.kind)).toEqual(['user', 'result']);
+    expect(st.evidence).toHaveLength(1);
+  });
+
+  it('restores a waiting approval: approval card + Informe tab + reportId', () => {
+    const st = hydrateChatState({
+      ...base,
+      status: 'waiting',
+      userMessage: 'Genera un informe',
+      reportId: 'report-7',
+      pending: { type: 'approval', interruptId: 'i1', description: 'Guardar informe', reportPreviewId: 'report-7' },
+    } as SessionSnapshot);
+
+    expect(st.status).toBe('waiting');
+    expect(st.messages.at(-1)!.kind).toBe('approval');
+    expect(st.reportId).toBe('report-7');
+    expect(st.requestedTab).toBe('informe');
+  });
+
+  it('restores a failed run as an error bubble, not a success result', () => {
+    const st = hydrateChatState({
+      ...base,
+      status: 'failed',
+      userMessage: 'algo que falló',
+      finalText: 'No se pudo completar la consulta.',
+    } as SessionSnapshot);
+
+    expect(st.status).toBe('failed');
+    expect(st.messages.at(-1)!.kind).toBe('error');
+  });
+
+  it('restores a waiting clarification card', () => {
+    const st = hydrateChatState({
+      ...base,
+      status: 'waiting',
+      userMessage: 'sanciones de bambas',
+      pending: {
+        type: 'clarification',
+        request: { question: '¿Cuál administrado?', candidates: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }] },
+      },
+    } as SessionSnapshot);
+
+    const last = st.messages.at(-1)!;
+    expect(last.kind).toBe('clarification');
+    expect(st.status).toBe('waiting');
   });
 });

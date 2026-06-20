@@ -10,6 +10,7 @@ import { streamSSE } from 'hono/streaming';
 import { z, ZodError } from 'zod';
 import { OEFA_DATASETS } from '../services/oefa/datasets.js';
 import { RecordFilterSchema } from '../services/oefa/oefa-service.js';
+import { buildSessionSnapshot } from '../orchestration/coordinator/snapshot.js';
 import type { OnProgress } from '../orchestration/coordinator/types.js';
 import type { AppDeps } from './deps.js';
 
@@ -143,6 +144,13 @@ export function createServer(deps: AppDeps): Hono {
   app.get('/sessions/:id', async (c) => {
     const session = await deps.sessionStore.getSession(c.req.param('id'));
     return session ? c.json(session) : c.json({ error: 'Sesión no encontrada' }, 404);
+  });
+  // Chat-shaped projection of the latest persisted state, so reopening a session
+  // rehydrates the Workspace instead of starting blank (see SessionSnapshot).
+  app.get('/sessions/:id/snapshot', async (c) => {
+    const state = await deps.sessionStore.loadState(c.req.param('id'));
+    if (!state) return c.json({ error: 'Sesión no encontrada' }, 404);
+    return c.json(buildSessionSnapshot(state));
   });
 
   return app;

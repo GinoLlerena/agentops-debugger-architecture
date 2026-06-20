@@ -1,7 +1,6 @@
 import {
   type DomainTaskPacket,
   type DomainTaskResult,
-  type EvidenceItem,
   type LedgerEvent,
   type LedgerEventType,
   type NormalizedUserRequest,
@@ -15,6 +14,7 @@ import {
   resolveManifestForTask,
 } from '../manifests/registry.js';
 import { applyEvidenceGuardrail, collectKnownEvidenceIds } from './guardrail.js';
+import { collectEvidence, UI_SUPPRESSED_KEY } from './snapshot.js';
 import type {
   Coordinator,
   CoordinatorDeps,
@@ -100,12 +100,6 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
     };
   }
 
-  function collectAllEvidence(state: OrchestratorState): EvidenceItem[] {
-    const byId = new Map<string, EvidenceItem>();
-    for (const t of state.completedTasks) for (const e of t.evidence) byId.set(e.id, e);
-    return [...byId.values()];
-  }
-
   // ── steps ────────────────────────────────────────────────────────────────
 
   function ingest(request: NormalizedUserRequest): OrchestratorState {
@@ -146,6 +140,7 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
     if (result.kind === 'clarification') {
       state.executionStatus = 'waiting';
       state.interruptState = { interruptId: idgen(), reason: 'clarification' }; // no taskId → planner-origin
+      state.pendingClarification = result.clarification; // persist so a reopened session re-renders the card
       ledger(state, 'clarification_required', { question: result.clarification.question });
       await emit(onProgress, { type: 'clarification_required', payload: result.clarification });
       return state;
@@ -263,6 +258,7 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
     if (result.status === 'needs_user_input' && result.clarification) {
       state.executionStatus = 'waiting';
       state.interruptState = { interruptId: idgen(), reason: 'clarification', taskId: task.taskId };
+      state.pendingClarification = result.clarification; // persist for rehydration
       ledger(state, 'clarification_required', {}, { taskId: task.taskId, agentId: result.agentId });
       void emit(onProgress, { type: 'clarification_required', payload: result.clarification });
       return true;
@@ -328,7 +324,11 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
     opts: { suppressUi?: boolean } = {},
   ): OrchestratorState {
     if (state.executionStatus !== 'failed') state.executionStatus = 'completed';
-    const evidence = collectAllEvidence(state);
+    state.pendingClarification = undefined; // terminal: no card to restore
+    // Persist the UI-suppression decision so a reopened cancelled/denied run
+    // doesn't resurface the draft report/charts the live run intentionally hid.
+    if (opts.suppressUi) state.workspace.sharedFacts[UI_SUPPRESSED_KEY] = true;
+    const evidence = collectEvidence(state);
     const text = state.finalResponseDraft ?? defaultSummary(state);
     state.finalResponseDraft = text;
 
@@ -385,6 +385,7 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
 
     state.executionStatus = 'running';
     state.interruptState = undefined;
+    state.pendingClarification = undefined; // the suspension is being lifted
 
     if (interrupt.reason === 'approval') {
       if (resumption.type !== 'approval') {

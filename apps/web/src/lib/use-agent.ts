@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Resumption } from '@agentops/shared';
-import { initialChatState, reduceEvent, streamAgent, type ChatState } from './agent-stream.js';
+import { fetchSessionSnapshot } from './api.js';
+import {
+  hydrateChatState,
+  initialChatState,
+  reduceEvent,
+  streamAgent,
+  type ChatState,
+} from './agent-stream.js';
 
 let userSeq = 0;
 
@@ -13,10 +20,35 @@ let userSeq = 0;
  */
 export function useAgentStream(sessionId: string) {
   const [state, setState] = useState<ChatState>({ ...initialChatState, sessionId });
+  // True until the initial rehydration fetch settles — the UI shows a loader
+  // instead of the blank new-session screen, so a reopened session never flashes
+  // empty (and the composer stays gated so a user can't start a turn against a
+  // `waiting` session before its HITL card is restored).
+  const [hydrating, setHydrating] = useState(true);
   const busyRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => () => abortRef.current?.abort(), []);
+
+  // Rehydrate a reopened session once on mount: restore the latest turn from the
+  // persisted snapshot so the Workspace isn't blank. Skip seeding if a run
+  // already started (busy) or any message exists — never clobber live/typed state.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const snap = await fetchSessionSnapshot(sessionId).catch(() => null);
+      if (cancelled) return;
+      if (snap && !busyRef.current) {
+        setState((prev) =>
+          prev.messages.length === 0 && prev.status === 'idle' ? hydrateChatState(snap) : prev,
+        );
+      }
+      setHydrating(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId]);
 
   const onEvent = useCallback((e: Parameters<typeof reduceEvent>[1]) => {
     setState((prev) => reduceEvent(prev, e));
@@ -63,5 +95,5 @@ export function useAgentStream(sessionId: string) {
     [run, sessionId],
   );
 
-  return { state, send, resume };
+  return { state, send, resume, hydrating };
 }
