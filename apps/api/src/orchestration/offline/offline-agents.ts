@@ -11,8 +11,9 @@ import type { ReportStore } from '../../persistence/report-store.js';
 import { createOfflineReportAgent, createOfflineReportManager } from './offline-report-agents.js';
 import { foldAccents } from '../../services/util/text.js';
 import { buildDataArtifacts, entityQueryFor } from '../data-artifacts.js';
+import { messages } from '../../i18n/messages.js';
 import { AGENT_IDS } from '../manifests/registry.js';
-import type { Planner, PlanResult, SpecialistAgent } from '../coordinator/types.js';
+import type { AgentRunContext, Planner, PlanResult, SpecialistAgent } from '../coordinator/types.js';
 
 /**
  * No-LLM fallback planner + agents. When Qwen is not configured, these let the
@@ -22,9 +23,12 @@ import type { Planner, PlanResult, SpecialistAgent } from '../coordinator/types.
  * Mastra agents replace them when Qwen is available.
  */
 
-/** Does the query ask for a report/informe (Flow A) vs a grounded answer (Flow B)? */
+/** Does the query ask for a report/informe (Flow A) vs a grounded answer (Flow B)?
+ *  Recognizes both Spanish and English intent keywords (offline heuristic). */
 function isReportIntent(query: string): boolean {
-  return /\b(informe|reporte|genera|elabora|prepara)\b/.test(foldAccents(query));
+  return /\b(informe|reporte|genera|elabora|prepara|report|generate|draft|prepare|create)\b/.test(
+    foldAccents(query),
+  );
 }
 
 /** Heuristic planner: any query → resolve entity (data) + ground in docs (RAG);
@@ -32,17 +36,18 @@ function isReportIntent(query: string): boolean {
 export function createOfflinePlanner(): Planner {
   return {
     async plan({ request }): Promise<PlanResult> {
+      const m = messages(request.language);
       const query = request.text.trim();
       if (!query) {
-        return { kind: 'reply', text: 'No encontré evidencia en las fuentes consultadas.' };
+        return { kind: 'reply', text: m.noEvidence };
       }
       const tasks: DomainTaskPacket[] = [
         {
           taskId: 'data',
           domain: 'oefa_data',
           operation: 'search',
-          title: 'Buscar registros del administrado',
-          instruction: 'Resolver la entidad y consultar sus sanciones y medidas.',
+          title: m.taskDataTitle,
+          instruction: m.taskDataInstruction,
           inputs: { query },
           dependsOn: [],
         },
@@ -50,8 +55,8 @@ export function createOfflinePlanner(): Planner {
           taskId: 'docs',
           domain: 'oefa_docs',
           operation: 'search',
-          title: 'Recuperar documentos relacionados',
-          instruction: 'Recuperar resoluciones e informes que sustenten la respuesta.',
+          title: m.taskDocsTitle,
+          instruction: m.taskDocsInstruction,
           inputs: { query },
           dependsOn: [],
         },
@@ -62,8 +67,8 @@ export function createOfflinePlanner(): Planner {
             taskId: 'report',
             domain: 'report',
             operation: 'create',
-            title: 'Redactar el informe de antecedentes',
-            instruction: 'Cruzar datos y evidencia; redactar hallazgos, advertencias y recomendaciones.',
+            title: m.taskReportTitle,
+            instruction: m.taskReportInstruction,
             inputs: {},
             dependsOn: ['data', 'docs'],
           },
@@ -71,8 +76,8 @@ export function createOfflinePlanner(): Planner {
             taskId: 'save',
             domain: 'report_admin',
             operation: 'create',
-            title: 'Guardar el informe',
-            instruction: 'Guardar y finalizar el informe (requiere aprobación).',
+            title: m.taskSaveTitle,
+            instruction: m.taskSaveInstruction,
             inputs: {},
             dependsOn: ['report'],
           },
@@ -80,9 +85,7 @@ export function createOfflinePlanner(): Planner {
       }
       return {
         kind: 'plan',
-        reasoning: isReportIntent(query)
-          ? 'La consulta pide un informe: reúno datos y documentos, redacto el informe y solicito tu aprobación antes de guardarlo.'
-          : 'La consulta requiere historial de cumplimiento: combino datos públicos de OEFA con los documentos del corpus para responder con citas.',
+        reasoning: isReportIntent(query) ? m.reasoningReport : m.reasoningQa,
         tasks,
       };
     },
@@ -108,7 +111,8 @@ function recordToEvidence(r: OefaRecord): EvidenceItem {
 export function createOfflineDataAgent(oefa: OefaService): SpecialistAgent {
   return {
     agentId: AGENT_IDS.data,
-    async run(task: DomainTaskPacket): Promise<DomainTaskResult> {
+    async run(task: DomainTaskPacket, ctx: AgentRunContext): Promise<DomainTaskResult> {
+      const m = messages(ctx.state.language);
       const answer = task.inputs.clarificationAnswer as string | undefined;
       const query = answer ?? (task.inputs.query as string | undefined) ?? task.instruction;
       const base = await oefa.getRecords();
@@ -116,22 +120,22 @@ export function createOfflineDataAgent(oefa: OefaService): SpecialistAgent {
       const profile = await oefa.getCompanyProfile(entityQuery);
 
       if (profile.status === 'ambiguous') {
-        return mkResult(AGENT_IDS.data, task, 'needs_user_input', 'Se requiere desambiguar el administrado.', {
+        return mkResult(AGENT_IDS.data, task, 'needs_user_input', m.disambiguateSummary, {
           clarification: {
-            question: `Encontré ${profile.candidates.length} administrados similares. ¿Cuál?`,
+            question: m.clarifyQuestion(profile.candidates.length),
             candidates: profile.candidates.map((c) => ({
               id: c.ruc ?? c.administrado,
               label: c.administrado,
               ruc: c.ruc,
               sector: c.sector,
-              note: `${c.recordCount} registro(s)`,
+              note: m.candidateNote(c.recordCount),
             })),
           },
         });
       }
 
       if (profile.status === 'not_found') {
-        return mkResult(AGENT_IDS.data, task, 'completed', 'No encontré evidencia en las fuentes consultadas.', {});
+        return mkResult(AGENT_IDS.data, task, 'completed', m.noEvidence, {});
       }
 
       const { entity, records, stats } = profile.profile;
@@ -139,10 +143,13 @@ export function createOfflineDataAgent(oefa: OefaService): SpecialistAgent {
       const findings: Finding[] = [
         {
           id: 'F-data',
-          statement:
-            `${entity.administrado} registra ${stats.totalRecords} acto(s) administrativo(s), ` +
-            `${stats.firmCount} con resolución firme; exposición ${stats.sumFineUit} UIT.` +
-            (stats.reincidencia ? ' Presenta reincidencia.' : ''),
+          statement: m.dataFinding({
+            administrado: entity.administrado,
+            total: stats.totalRecords,
+            firm: stats.firmCount,
+            uit: stats.sumFineUit,
+            reincidencia: stats.reincidencia,
+          }),
           evidenceIds: evidence.map((e) => e.id),
           confidence: 'directa',
         },
@@ -155,12 +162,13 @@ export function createOfflineDataAgent(oefa: OefaService): SpecialistAgent {
         coverage: base.coverage,
         asOf: base.fetchedAt,
         producedByAgentId: AGENT_IDS.data,
+        language: ctx.state.language,
       });
       return mkResult(
         AGENT_IDS.data,
         task,
         'completed',
-        `${stats.totalRecords} registros de ${entity.administrado} (${stats.firmCount} firmes).`,
+        m.dataSummary({ total: stats.totalRecords, administrado: entity.administrado, firm: stats.firmCount }),
         { evidence, findings, artifacts },
       );
     },
@@ -171,14 +179,15 @@ export function createOfflineDataAgent(oefa: OefaService): SpecialistAgent {
 export function createOfflineDocsAgent(rag: RagService): SpecialistAgent {
   return {
     agentId: AGENT_IDS.docs,
-    async run(task: DomainTaskPacket): Promise<DomainTaskResult> {
+    async run(task: DomainTaskPacket, ctx: AgentRunContext): Promise<DomainTaskResult> {
+      const m = messages(ctx.state.language);
       const query =
         (task.inputs.clarificationAnswer as string | undefined) ??
         (task.inputs.query as string | undefined) ??
         task.instruction;
       const results = await rag.retrieve(query, { limit: 3 });
       if (results.length === 0) {
-        return mkResult(AGENT_IDS.docs, task, 'completed', 'No se recuperaron documentos relevantes.', {});
+        return mkResult(AGENT_IDS.docs, task, 'completed', m.noDocs, {});
       }
       const evidence: EvidenceItem[] = results.map((r) => ({
         id: r.chunk.id,
@@ -192,12 +201,12 @@ export function createOfflineDocsAgent(rag: RagService): SpecialistAgent {
       const findings: Finding[] = [
         {
           id: 'F-docs',
-          statement: `Se recuperaron ${evidence.length} fragmento(s) documental(es) relacionados.`,
+          statement: m.docsFinding(evidence.length),
           evidenceIds: evidence.map((e) => e.id),
           confidence: 'directa',
         },
       ];
-      return mkResult(AGENT_IDS.docs, task, 'completed', `${evidence.length} fragmentos recuperados.`, {
+      return mkResult(AGENT_IDS.docs, task, 'completed', m.docsSummary(evidence.length), {
         evidence,
         findings,
       });

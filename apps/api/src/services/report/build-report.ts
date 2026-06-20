@@ -1,13 +1,19 @@
 import {
+  DEFAULT_LANGUAGE,
   Report,
   type EvidenceItem,
   type Finding,
+  type Language,
   type OefaRecord,
   type Recommendation,
   type RiskSeverity,
   type Warning,
 } from '@agentops/shared';
 import type { CompanyStats } from '../oefa/oefa-service.js';
+import { messages } from '../../i18n/messages.js';
+
+/** BCP-47 locale for the report's issue/consultation dates. */
+const LOCALES: Record<Language, string> = { es: 'es-PE', en: 'en-US' };
 
 /**
  * Build a structured "Informe de Antecedentes Ambientales" from the evidence the
@@ -28,6 +34,7 @@ export interface BuildReportInput {
   coverage?: string;
   asOf: string; // ISO
   agentVersion: string;
+  language?: Language;
 }
 
 function riskLevel(stats: CompanyStats): RiskSeverity {
@@ -39,16 +46,20 @@ function riskLevel(stats: CompanyStats): RiskSeverity {
 
 export function buildReport(input: BuildReportInput): Report {
   const { entity, stats, evidence } = input;
+  const language = input.language ?? DEFAULT_LANGUAGE;
+  const m = messages(language);
   const evidenceIds = evidence.map((e) => e.id);
-  const issueDate = new Date(input.asOf).toLocaleDateString('es-PE');
+  const issueDate = new Date(input.asOf).toLocaleDateString(LOCALES[language]);
 
   const findings: Finding[] = [
     {
       id: 'F1',
-      statement:
-        `${entity.administrado} registra ${stats.totalRecords} acto(s) administrativo(s), ` +
-        `de los cuales ${stats.firmCount} corresponden a resoluciones firmes; ` +
-        `la exposición acumulada asciende a ${stats.sumFineUit} UIT.`,
+      statement: m.findingExposure({
+        administrado: entity.administrado,
+        total: stats.totalRecords,
+        firm: stats.firmCount,
+        uit: stats.sumFineUit,
+      }),
       evidenceIds,
       confidence: evidenceIds.length > 0 ? 'directa' : 'sin_evidencia',
     },
@@ -56,7 +67,7 @@ export function buildReport(input: BuildReportInput): Report {
   if (stats.reincidencia) {
     findings.push({
       id: 'F2',
-      statement: `Se identifica reincidencia en las infracciones imputadas al administrado.`,
+      statement: m.findingReincidencia,
       evidenceIds,
       confidence: 'directa',
     });
@@ -67,7 +78,7 @@ export function buildReport(input: BuildReportInput): Report {
     warnings.push({
       id: 'W1',
       severity: 'Crítica',
-      statement: 'Patrón de reincidencia detectado; mayor probabilidad de agravantes.',
+      statement: m.warningReincidencia,
       evidenceIds,
     });
   }
@@ -75,7 +86,7 @@ export function buildReport(input: BuildReportInput): Report {
     warnings.push({
       id: 'W2',
       severity: 'Advertencia',
-      statement: `${stats.openCount} resolución(es) no firme(s) (en proceso o apeladas); el estado puede cambiar.`,
+      statement: m.warningOpen(stats.openCount),
       evidenceIds,
     });
   }
@@ -83,8 +94,8 @@ export function buildReport(input: BuildReportInput): Report {
   const recommendations: Recommendation[] = [
     {
       id: 'R1',
-      text: 'Se recomienda revisar los instrumentos de gestión ambiental y el cumplimiento de las medidas correctivas dictadas.',
-      rationale: 'Reduce la exposición a nuevas imputaciones y agravantes por reincidencia.',
+      text: m.recommendationText,
+      rationale: m.recommendationRationale,
       sourceIds: evidenceIds,
     },
   ];
@@ -96,13 +107,14 @@ export function buildReport(input: BuildReportInput): Report {
     sessionId: input.sessionId,
     template: 'antecedentes',
     status: 'draft',
-    title: `Informe de Antecedentes Ambientales — ${entity.administrado}`,
+    language,
+    title: m.reportTitle(entity.administrado),
     subjectEntity: { name: entity.administrado, ruc: entity.ruc },
     periodAnalyzed: input.coverage
       ? { from: input.coverage.split('-')[0], to: input.coverage.split('-')[1] }
       : undefined,
     issueDate,
-    confidentialityLabel: 'Confidencial',
+    confidentialityLabel: m.confidential,
     executiveSummary: {
       keyFindings: findings.map((f) => f.statement),
       riskLevel: riskLevel(stats),
@@ -112,9 +124,7 @@ export function buildReport(input: BuildReportInput): Report {
       questionsAddressed: [input.question],
       sourcesConsulted: [input.source, ...documents],
       consultationDates: [issueDate],
-      limitations: [
-        'Basado en información pública a la fecha de consulta; el estado de las resoluciones puede cambiar.',
-      ],
+      limitations: [m.limitation],
     },
     findings,
     warnings,

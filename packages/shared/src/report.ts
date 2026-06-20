@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { Id, IsoTimestamp, RiskSeverity, WarningSeverity } from './common.js';
+import { DEFAULT_LANGUAGE, Id, IsoTimestamp, Language, RiskSeverity, WarningSeverity } from './common.js';
 import { Finding } from './evidence.js';
 
 /**
@@ -80,6 +80,8 @@ export const Report = z.object({
   sessionId: Id,
   template: ReportTemplate,
   status: ReportStatus.default('draft'),
+  /** Language the report content was generated in — drives localized exports. */
+  language: Language.default(DEFAULT_LANGUAGE),
 
   // 1. Carátula
   title: z.string(),

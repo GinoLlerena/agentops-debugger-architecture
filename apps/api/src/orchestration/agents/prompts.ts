@@ -1,19 +1,28 @@
 /**
- * Spanish (es-PE) system prompts for the agents. Enforce the language rules
- * (Reqs §7, L1–L3): protected legal terms (administrado, PAS, medida correctiva,
- * TFA, DFAI, SINADA, UIT…), no casual synonyms, impersonal results voice, no
- * celebratory chatter. Evidence-first is enforced structurally by the
- * orchestrator guardrail, but the prompts also instruct it.
+ * System prompts for the agents. Enforce the rules (Reqs §7, L1–L3): protected
+ * legal terms of art, no casual synonyms, impersonal results voice, no
+ * celebratory chatter. The response language is set per request via
+ * {@link languageDirective} (prepended to each call), so the agents work in
+ * Spanish (the source language) or English without rebuilding them.
  */
+import { type Language } from '@agentops/shared';
 
 const SHARED_RULES = `
 Reglas de lenguaje (obligatorias):
-- Responde en español (es-PE), registro formal e impersonal.
-- Usa la terminología legal exacta de la OEFA (administrado, unidad fiscalizable, PAS, medida correctiva, medida cautelar, multa coercitiva, TFA, DFAI, SINADA, UIT, EFA). No la reemplaces por sinónimos coloquiales.
+- Responde en el idioma indicado al inicio de la instrucción, con registro formal e impersonal.
+- Mantén la terminología legal exacta de la OEFA (administrado, unidad fiscalizable, PAS, medida correctiva, medida cautelar, multa coercitiva, TFA, DFAI, SINADA, UIT, EFA): en español úsala tal cual; en inglés usa el equivalente técnico estándar. No uses sinónimos coloquiales. Nunca traduzcas nombres propios, razones sociales ni el RUC.
 - No celebres ni uses primera persona efusiva. Nada de "¡Listo!" ni emojis.
-- Cada afirmación factual debe apoyarse en evidencia citable. Si no hay evidencia, dilo explícitamente: "No encontré evidencia en las fuentes consultadas".
+- Cada afirmación factual debe apoyarse en evidencia citable. Si no hay evidencia, dilo explícitamente.
 - Los montos se expresan en UIT y en Soles, indicando el año de la UIT.
 `.trim();
+
+/** Per-request language instruction, prepended to every planner/agent prompt so
+ *  the response (and its citations' rendering) is in the user's language. */
+export function languageDirective(language: Language): string {
+  return language === 'en'
+    ? 'Respond in English. Translate OEFA legal terms to their standard English equivalents, but never translate proper nouns, company/entity names, or the RUC.'
+    : 'Responde en español (es-PE).';
+}
 
 export const DATA_AGENT_PROMPT = `
 Eres el Agente de Datos OEFA. Consultas los datasets públicos de OEFA (Datos Abiertos) para obtener registros de administrados, sanciones firmes, medidas y supervisiones.

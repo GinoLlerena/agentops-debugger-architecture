@@ -5,6 +5,7 @@ import {
   EvidenceItem,
   type DomainTaskPacket,
   type DomainTaskResult,
+  type Language,
   type OefaRecord,
 } from '@agentops/shared';
 import { z } from 'zod';
@@ -21,7 +22,7 @@ import {
 import { AGENT_IDS } from '../manifests/registry.js';
 import type { AgentRunContext, SpecialistAgent } from '../coordinator/types.js';
 import { toMastraTools } from './mastra-tool.js';
-import { DATA_AGENT_PROMPT, DOCS_AGENT_PROMPT } from './prompts.js';
+import { DATA_AGENT_PROMPT, DOCS_AGENT_PROMPT, languageDirective } from './prompts.js';
 
 /**
  * Structured output we ask each specialist LLM to return. The orchestrator then
@@ -47,10 +48,14 @@ const AgentOutputSchema = z.object({
 });
 export type AgentOutput = z.infer<typeof AgentOutputSchema>;
 
-/** Render a task into a prompt for the specialist agent. */
-function taskPrompt(task: DomainTaskPacket): string {
-  const inputs = Object.keys(task.inputs).length ? `\nDatos: ${JSON.stringify(task.inputs)}` : '';
-  return `Tarea: ${task.title}\nInstrucción: ${task.instruction}${inputs}`;
+/** Render a task into a prompt for the specialist agent, in the run's language. */
+function taskPrompt(task: DomainTaskPacket, language: Language): string {
+  const L =
+    language === 'en'
+      ? { task: 'Task', instruction: 'Instruction', data: 'Data' }
+      : { task: 'Tarea', instruction: 'Instrucción', data: 'Datos' };
+  const inputs = Object.keys(task.inputs).length ? `\n${L.data}: ${JSON.stringify(task.inputs)}` : '';
+  return `${languageDirective(language)}\n\n${L.task}: ${task.title}\n${L.instruction}: ${task.instruction}${inputs}`;
 }
 
 /**
@@ -62,9 +67,9 @@ function taskPrompt(task: DomainTaskPacket): string {
 export function toSpecialistAgent(agentId: string, agent: Agent): SpecialistAgent {
   return {
     agentId,
-    async run(task: DomainTaskPacket, _ctx: AgentRunContext): Promise<DomainTaskResult> {
+    async run(task: DomainTaskPacket, ctx: AgentRunContext): Promise<DomainTaskResult> {
       try {
-        const res = await agent.generate(taskPrompt(task), {
+        const res = await agent.generate(taskPrompt(task, ctx.state.language), {
           structuredOutput: { schema: AgentOutputSchema },
         });
         const out = res.object as AgentOutput;
@@ -178,6 +183,7 @@ export function toLiveDataAgent(agent: Agent, oefa: OefaService): SpecialistAgen
         coverage: base.coverage,
         asOf: base.fetchedAt,
         producedByAgentId: AGENT_IDS.data,
+        language: ctx.state.language,
       });
       return { ...result, artifacts: [...result.artifacts, ...artifacts] };
     },

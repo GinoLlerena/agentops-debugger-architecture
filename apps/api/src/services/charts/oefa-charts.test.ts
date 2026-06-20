@@ -88,4 +88,20 @@ describe('buildOefaCharts', () => {
   it('returns no charts for an empty record set', () => {
     expect(buildOefaCharts([], ctx)).toEqual([]);
   });
+
+  it('localizes chart titles/units to English while keeping data + status keys', () => {
+    const charts = buildOefaCharts(records, { ...ctx, language: 'en' });
+    const bar = charts.find((c) => c.kind === 'bar')!;
+    const sev = charts.find((c) => c.kind === 'severity')!;
+    const timeline = charts.find((c) => c.kind === 'timeline')!;
+    expect(bar.title).toBe('How much do fines add up to per year?');
+    expect(bar.unit).toBe('UIT'); // unit kept verbatim
+    expect(sev.title).toBe('How are resolutions distributed by status?');
+    expect(sev.unit).toBe('records');
+    expect(timeline.title).toContain('Procedural timeline · Minera Las Bambas');
+    // status category stays the canonical Spanish stored key (color keying), but the
+    // displayed label is localized.
+    const firme = sev.series.find((p) => p.category === 'firme')!;
+    expect(firme.label).toBe('Final (consented)');
+  });
 });

@@ -1,4 +1,4 @@
-import type { ArtifactRecord, OefaRecord } from '@agentops/shared';
+import type { ArtifactRecord, Language, OefaRecord } from '@agentops/shared';
 import type { CompanyStats } from '../services/oefa/oefa-service.js';
 import { buildOefaCharts } from '../services/charts/oefa-charts.js';
 import { foldAccents } from '../services/util/text.js';
@@ -41,8 +41,9 @@ export function buildDataArtifacts(params: {
   coverage?: string;
   asOf: string;
   producedByAgentId: string;
+  language?: Language;
 }): ArtifactRecord[] {
-  const { entity, records, stats, source, coverage, asOf, producedByAgentId } = params;
+  const { entity, records, stats, source, coverage, asOf, producedByAgentId, language } = params;
   const recordSet: ArtifactRecord = {
     id: `records:${entity.ruc ?? entity.administrado}`,
     kind: 'record_set',
@@ -58,6 +59,7 @@ export function buildDataArtifacts(params: {
     asOf,
     producedByAgentId,
     entityLabel: entity.administrado,
+    language,
   }).map((chart) => ({
     id: chart.id,
     kind: 'chart_data',
