@@ -1,5 +1,4 @@
 import type {
-  ArtifactRecord,
   DomainTaskPacket,
   DomainTaskResult,
   EvidenceItem,
@@ -8,10 +7,10 @@ import type {
 } from '@agentops/shared';
 import type { OefaService } from '../../services/oefa/oefa-service.js';
 import type { RagService } from '../../services/rag/index.js';
-import { buildOefaCharts } from '../../services/charts/oefa-charts.js';
 import type { ReportStore } from '../../persistence/report-store.js';
 import { createOfflineReportAgent, createOfflineReportManager } from './offline-report-agents.js';
 import { foldAccents } from '../../services/util/text.js';
+import { buildDataArtifacts, entityQueryFor } from '../data-artifacts.js';
 import { AGENT_IDS } from '../manifests/registry.js';
 import type { Planner, PlanResult, SpecialistAgent } from '../coordinator/types.js';
 
@@ -22,12 +21,6 @@ import type { Planner, PlanResult, SpecialistAgent } from '../coordinator/types.
  * Phase 1 OEFA/RAG services directly and return real cited evidence; the live
  * Mastra agents replace them when Qwen is available.
  */
-
-function clean(text: string): string[] {
-  return foldAccents(text)
-    .split(/[^a-z0-9]+/)
-    .filter((t) => t.length >= 4);
-}
 
 /** Does the query ask for a report/informe (Flow A) vs a grounded answer (Flow B)? */
 function isReportIntent(query: string): boolean {
@@ -111,21 +104,6 @@ function recordToEvidence(r: OefaRecord): EvidenceItem {
   };
 }
 
-/** Pick an entity query from a free-text question: an 11-digit RUC wins; else the
- *  longest query token that appears in some administrado name. */
-function entityQueryFor(question: string, records: OefaRecord[]): string {
-  // Only treat an 11-digit run as a RUC if it actually matches a known record —
-  // otherwise a stray document id / number would shadow a company name present
-  // in the same question.
-  const ruc = question.match(/\b\d{11}\b/);
-  if (ruc && records.some((r) => r.ruc === ruc[0])) return ruc[0];
-  const nameTokens = new Set(records.flatMap((r) => clean(r.administrado)));
-  const candidates = clean(question)
-    .filter((t) => nameTokens.has(t))
-    .sort((a, b) => b.length - a.length);
-  return candidates[0] ?? question;
-}
-
 /** Offline DataAgent: resolves the entity over seed records; clarifies if ambiguous. */
 export function createOfflineDataAgent(oefa: OefaService): SpecialistAgent {
   return {
@@ -169,35 +147,21 @@ export function createOfflineDataAgent(oefa: OefaService): SpecialistAgent {
           confidence: 'directa',
         },
       ];
-      const recordSet: ArtifactRecord = {
-        id: `records:${entity.ruc ?? entity.administrado}`,
-        kind: 'record_set',
-        producedByAgentId: AGENT_IDS.data,
-        createdAt: base.fetchedAt,
-        summary: `${records.length} registros de ${entity.administrado}`,
-        data: { records, stats },
-      };
-      // Chart specs → chart_data artifacts the canvas renders (agent-driven UI).
-      const chartArtifacts: ArtifactRecord[] = buildOefaCharts(records, {
+      const artifacts = buildDataArtifacts({
+        entity,
+        records,
+        stats,
         source: `API OEFA · ${base.datasetId}`,
         coverage: base.coverage,
         asOf: base.fetchedAt,
         producedByAgentId: AGENT_IDS.data,
-        entityLabel: entity.administrado,
-      }).map((chart) => ({
-        id: chart.id,
-        kind: 'chart_data',
-        producedByAgentId: AGENT_IDS.data,
-        createdAt: base.fetchedAt,
-        summary: chart.title,
-        data: chart,
-      }));
+      });
       return mkResult(
         AGENT_IDS.data,
         task,
         'completed',
         `${stats.totalRecords} registros de ${entity.administrado} (${stats.firmCount} firmes).`,
-        { evidence, findings, artifacts: [recordSet, ...chartArtifacts] },
+        { evidence, findings, artifacts },
       );
     },
   };

@@ -5,21 +5,23 @@ import {
   EvidenceItem,
   type DomainTaskPacket,
   type DomainTaskResult,
+  type OefaRecord,
 } from '@agentops/shared';
 import { z } from 'zod';
 import type { QwenProvider } from '../../services/qwen/qwen-provider.js';
 import { createOefaTools } from '../../services/oefa/tools.js';
 import type { OefaService } from '../../services/oefa/oefa-service.js';
 import { createRagTools, type RagService } from '../../services/rag/index.js';
+import type { ReportStore } from '../../persistence/report-store.js';
+import { buildDataArtifacts, entityQueryFor } from '../data-artifacts.js';
+import {
+  createOfflineReportAgent,
+  createOfflineReportManager,
+} from '../offline/offline-report-agents.js';
 import { AGENT_IDS } from '../manifests/registry.js';
 import type { AgentRunContext, SpecialistAgent } from '../coordinator/types.js';
 import { toMastraTools } from './mastra-tool.js';
-import {
-  DATA_AGENT_PROMPT,
-  DOCS_AGENT_PROMPT,
-  REPORT_AGENT_PROMPT,
-  REPORT_MANAGER_PROMPT,
-} from './prompts.js';
+import { DATA_AGENT_PROMPT, DOCS_AGENT_PROMPT } from './prompts.js';
 
 /**
  * Structured output we ask each specialist LLM to return. The orchestrator then
@@ -119,37 +121,91 @@ export function createDocsMastraAgent(qwen: QwenProvider, rag: RagService): Agen
   });
 }
 
-export function createReportMastraAgent(qwen: QwenProvider): Agent {
-  return new Agent({
-    id: AGENT_IDS.report,
-    name: 'Agente de Informes',
-    instructions: REPORT_AGENT_PROMPT,
-    model: qwen.getChatModel(),
-  });
+/** Read a string-valued task input; `inputs` is `z.record(z.unknown())`, so a
+ *  live planner could emit a non-string — guard rather than crash downstream. */
+function strInput(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
 }
 
-export function createReportManagerMastraAgent(qwen: QwenProvider): Agent {
-  return new Agent({
-    id: AGENT_IDS.reportManager,
-    name: 'Gestor de Expedientes',
-    instructions: REPORT_MANAGER_PROMPT,
-    model: qwen.getChatModel(),
-  });
+/** The administrado the LLM actually cited (via an `OEFA:<recordId>` evidence id),
+ *  if any. Anchoring the deterministic resolution here keeps the materialized
+ *  artifacts about the same company as the narrative. */
+function entityFromEvidence(evidence: EvidenceItem[], records: OefaRecord[]): string | undefined {
+  for (const e of evidence) {
+    const recordId = e.id.startsWith('OEFA:') ? e.id.slice('OEFA:'.length) : e.id;
+    const rec = records.find((r) => r.id === recordId);
+    if (rec) return rec.ruc ?? rec.administrado;
+  }
+  return undefined;
 }
 
-/** Build the full specialist agent map (Data/Docs/Report/ReportManager) for the Coordinator. */
+/**
+ * Live DataAgent: the Mastra agent (LLM) produces the narrative — summary,
+ * findings and cited evidence — and we then deterministically materialize the
+ * `record_set` + `chart_data` artifacts from the OEFA service. The LLM alone
+ * never emits artifacts, so without this the canvas would have no charts and the
+ * ReportAgent (which reads the `record_set`) would have nothing to build from.
+ * The artifact step is pure and reuses the same builder as the offline agent,
+ * so live and offline produce identical structured data over the same records.
+ */
+export function toLiveDataAgent(agent: Agent, oefa: OefaService): SpecialistAgent {
+  const narrator = toSpecialistAgent(AGENT_IDS.data, agent);
+  return {
+    agentId: AGENT_IDS.data,
+    async run(task: DomainTaskPacket, ctx: AgentRunContext): Promise<DomainTaskResult> {
+      const result = await narrator.run(task, ctx);
+      // Only attach artifacts for a resolved answer — a clarification or failure
+      // has no entity to chart yet.
+      if (result.status !== 'completed') return result;
+      const original = ctx.state.workspace.sharedFacts.originalRequest as { text?: string } | undefined;
+      const clarified = strInput(task.inputs.clarificationAnswer);
+      const query = clarified ?? strInput(task.inputs.query) ?? original?.text ?? task.instruction;
+      const base = await oefa.getRecords();
+      // Resolve the entity the artifacts describe: a clarification answer is
+      // authoritative; else anchor to the company the LLM cited; else fall back
+      // to the query heuristic. This guarantees the charts/records match the
+      // narrative instead of silently describing a different administrado.
+      const entityQuery =
+        clarified ?? entityFromEvidence(result.evidence, base.records) ?? entityQueryFor(query, base.records);
+      const profile = await oefa.getCompanyProfile(entityQuery);
+      if (profile.status !== 'ok') return result; // ambiguous/not_found → narrative only
+      const { entity, records, stats } = profile.profile;
+      const artifacts = buildDataArtifacts({
+        entity,
+        records,
+        stats,
+        source: `API OEFA · ${base.datasetId}`,
+        coverage: base.coverage,
+        asOf: base.fetchedAt,
+        producedByAgentId: AGENT_IDS.data,
+      });
+      return { ...result, artifacts: [...result.artifacts, ...artifacts] };
+    },
+  };
+}
+
+/**
+ * Build the full specialist agent map (Data/Docs/Report/ReportManager) for the
+ * live Coordinator. Data and Docs are Mastra (Qwen) agents; the Report agents
+ * are the deterministic builders — a regulatory report carries a mandatory
+ * disclaimer (`z.literal`) and findings cited to evidence, so it is assembled
+ * from the data, not LLM-rephrased (which could alter the disclaimer or
+ * fabricate uncited findings). Both modes therefore share one report builder.
+ */
 export function createSpecialistAgents(deps: {
   qwen: QwenProvider;
   oefa: OefaService;
   rag: RagService;
+  reportStore: ReportStore;
+  idgen?: () => string;
+  clock?: () => Date;
 }): Record<string, SpecialistAgent> {
+  const idgen = deps.idgen ?? (() => crypto.randomUUID().split('-')[0]!);
+  const clock = deps.clock ?? (() => new Date());
   return {
-    [AGENT_IDS.data]: toSpecialistAgent(AGENT_IDS.data, createDataMastraAgent(deps.qwen, deps.oefa)),
+    [AGENT_IDS.data]: toLiveDataAgent(createDataMastraAgent(deps.qwen, deps.oefa), deps.oefa),
     [AGENT_IDS.docs]: toSpecialistAgent(AGENT_IDS.docs, createDocsMastraAgent(deps.qwen, deps.rag)),
-    [AGENT_IDS.report]: toSpecialistAgent(AGENT_IDS.report, createReportMastraAgent(deps.qwen)),
-    [AGENT_IDS.reportManager]: toSpecialistAgent(
-      AGENT_IDS.reportManager,
-      createReportManagerMastraAgent(deps.qwen),
-    ),
+    [AGENT_IDS.report]: createOfflineReportAgent(deps.reportStore, idgen, clock),
+    [AGENT_IDS.reportManager]: createOfflineReportManager(deps.reportStore),
   };
 }
