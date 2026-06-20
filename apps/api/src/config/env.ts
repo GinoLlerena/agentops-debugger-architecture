@@ -17,6 +17,10 @@ import { z } from 'zod';
 export const EnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(8787),
+  /** Directory of the built web SPA to serve same-origin (cwd-relative or
+   *  absolute). When present, the API also serves the front-end so a single
+   *  origin/container hosts both. Empty/absent → API-only (dev uses Vite). */
+  WEB_DIST_DIR: z.string().min(1).default('apps/web/dist'),
 
   // --- Qwen Cloud / DashScope (OpenAI-compatible) ---
   DASHSCOPE_API_KEY: z.string().min(1).optional(),

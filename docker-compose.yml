@@ -1,0 +1,16 @@
+# Convenience runner for the single-container app.
+#   docker compose up --build         # offline mode (no keys needed)
+#   (create a .env first to enable live Qwen/Tablestore/OSS — see .env.example)
+services:
+  agentops:
+    build: .
+    image: agentops-debugger
+    ports:
+      - '8787:8787'
+    environment:
+      - PORT=8787
+    # Optional: supply Alibaba/Qwen credentials for live mode. Absent → offline.
+    env_file:
+      - path: .env
+        required: false
+    restart: unless-stopped
