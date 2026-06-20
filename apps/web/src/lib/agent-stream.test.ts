@@ -237,7 +237,7 @@ describe('reduceEvent — terminal + branches', () => {
 });
 
 describe('hydrateChatState (rehydrate a reopened session)', () => {
-  const base = { sessionId: 's1', evidence: [], charts: [] };
+  const base = { sessionId: 's1', language: 'es' as const, evidence: [], charts: [] };
 
   it('restores a completed turn: user question + final answer', () => {
     const st = hydrateChatState({

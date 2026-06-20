@@ -1,20 +1,28 @@
 import { z } from 'zod';
-import { ConfidenceLabel, Id, IsoTimestamp } from './common.js';
+import { ConfidenceLabel, Id, IsoTimestamp, Language } from './common.js';
 
 /**
  * EvidenceItem — the signature atom (UX §4.7). Every claim in the UI carries at
  * least one of these as a citation chip. A claim with no evidence renders a
  * visible "sin fuente" chip rather than hiding the gap.
+ *
+ * `documentTitle`/`passage` always hold the *rendered* text in the response
+ * language. When that text was translated from the source, the Spanish original
+ * is preserved in the `*Original` sidecars (+ `originalLanguage`) so the UI can
+ * offer "show original" — citations stay faithful to the legal source.
  */
 export const EvidenceItem = z.object({
   id: Id, // e.g. "E1"
   documentTitle: z.string(),
+  documentTitleOriginal: z.string().optional(), // source-language title, if translated
   resolutionNumber: z.string().optional(), // e.g. "Resolución N.° 1245-2023-OEFA/DFAI"
   page: z.number().int().positive().optional(),
   paragraph: z.string().optional(), // e.g. "considerando 7"
   date: z.string().optional(), // DD/MM/AAAA as it appears in the source
   sourceUrl: z.string().url().optional(), // "Abrir documento original (p. N)"
   passage: z.string(), // the cited text (≤2 lines shown in popover)
+  passageOriginal: z.string().optional(), // source-language passage, if translated
+  originalLanguage: Language.optional(), // language of the *Original fields
   confidence: ConfidenceLabel,
   producedByAgentId: z.string().optional(), // attribution chip → trace
 });

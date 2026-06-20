@@ -1,5 +1,7 @@
 import type { ChartSpec } from '@agentops/shared';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { useI18n } from '../i18n/index.js';
+import { formatDate, formatNumber } from '../lib/format.js';
 import { Card } from './ui.js';
 
 /** Status → colour, always paired with a text label (never colour-only, UX §6.2). */
@@ -12,13 +14,9 @@ const STATUS_COLOR: Record<string, string> = {
   desconocido: '#5B6661',
 };
 
-function formatStamp(asOf: string): string {
-  const d = new Date(asOf);
-  return Number.isNaN(d.getTime()) ? asOf : d.toLocaleDateString('es-PE');
-}
-
 /** Wrapper that carries the question, unit, source + freshness stamp, attribution. */
 export function ChartCard({ spec, children }: { spec: ChartSpec; children: React.ReactNode }) {
+  const { t, locale } = useI18n();
   return (
     <Card className="p-3">
       <div className="mb-1 flex items-baseline justify-between gap-2">
@@ -29,7 +27,9 @@ export function ChartCard({ spec, children }: { spec: ChartSpec; children: React
       <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-linea pt-1.5">
         <span className="mono text-2xs text-gris-ev">
           {spec.source}
-          {spec.coverage ? ` · cobertura ${spec.coverage}` : ''} · consultado {formatStamp(spec.asOf)}
+          {spec.coverage ? ` · ${t('chart.coverage', { coverage: spec.coverage })}` : ''} ·{' '}
+          {/* fall back to the raw asOf string (not "—") when it isn't a parseable date */}
+          {t('chart.consulted', { date: formatDate(spec.asOf, locale, spec.asOf) })}
         </span>
         {spec.producedByAgentId && (
           <span className="ml-auto eyebrow">⚙ {spec.producedByAgentId}</span>
@@ -48,6 +48,7 @@ export function ChartView({ spec }: { spec: ChartSpec }) {
 }
 
 function BarChartView({ spec }: { spec: ChartSpec }) {
+  const { locale } = useI18n();
   const data = spec.series.map((p) => ({ name: p.label, value: p.value ?? 0 }));
   return (
     <ChartCard spec={spec}>
@@ -56,7 +57,7 @@ function BarChartView({ spec }: { spec: ChartSpec }) {
           <CartesianGrid stroke="#E2E6E2" vertical={false} />
           <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#5B6661' }} />
           <YAxis tick={{ fontSize: 11, fill: '#5B6661' }} width={40} />
-          <Tooltip formatter={(v: number) => [`${v.toLocaleString('en-US')} ${spec.unit ?? ''}`.trim(), '']} />
+          <Tooltip formatter={(v: number) => [`${formatNumber(v, locale)} ${spec.unit ?? ''}`.trim(), '']} />
           <Bar dataKey="value" fill="#0E5A47" radius={[2, 2, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>

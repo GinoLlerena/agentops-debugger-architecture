@@ -110,6 +110,7 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
       threadId: sessionId,
       sessionId,
       executionStatus: 'running',
+      language: request.language,
       workspace: { domains: {}, sharedFacts: { [REQUEST_KEY]: request }, entityRefs: {} },
       conversation: { rollingSummary: '', turnSummaries: [], entityIndex: {}, decisionLog: [] },
       pendingTasks: [],
@@ -432,6 +433,7 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
     const request: NormalizedUserRequest = {
       text: original?.text ?? resumption.answer,
       sessionId: state.sessionId,
+      language: state.language,
       requestContext: { ...(original?.requestContext ?? {}), clarificationAnswer: resumption.answer },
     };
     return doPlan(state, request, onProgress);

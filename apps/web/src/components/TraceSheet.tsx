@@ -1,22 +1,23 @@
 import { useTrace } from '../lib/api.js';
+import { useI18n, type MessageKey } from '../i18n/index.js';
 import { Sheet, Spinner } from './ui.js';
 
-/** Humanize a ledger event type into analyst-facing Spanish (UX §7). */
-const LABELS: Record<string, string> = {
-  turn_opened: 'Turno iniciado',
-  plan_created: 'Plan creado',
-  task_routed: 'Tarea asignada',
-  task_started: 'Tarea iniciada',
-  tool_called: 'Herramienta invocada',
-  evidence_attached: 'Evidencia adjuntada',
-  guardrail_drop: 'Afirmación descartada (sin evidencia)',
-  clarification_required: 'Aclaración solicitada',
-  approval_required: 'Aprobación requerida',
-  approval_granted: 'Aprobación otorgada',
-  task_done: 'Tarea completada',
-  report_saved: 'Informe guardado',
-  warning: 'Advertencia',
-  error: 'Error',
+/** Ledger event type → catalog key (humanized in the analyst's language, UX §7). */
+const EVENT_KEYS: Record<string, MessageKey> = {
+  turn_opened: 'trace.event.turn_opened',
+  plan_created: 'trace.event.plan_created',
+  task_routed: 'trace.event.task_routed',
+  task_started: 'trace.event.task_started',
+  tool_called: 'trace.event.tool_called',
+  evidence_attached: 'trace.event.evidence_attached',
+  guardrail_drop: 'trace.event.guardrail_drop',
+  clarification_required: 'trace.event.clarification_required',
+  approval_required: 'trace.event.approval_required',
+  approval_granted: 'trace.event.approval_granted',
+  task_done: 'trace.event.task_done',
+  report_saved: 'trace.event.report_saved',
+  warning: 'trace.event.warning',
+  error: 'trace.event.error',
 };
 
 /** Trazabilidad side sheet — the AgentOps debugger surfaced as domain language. */
@@ -29,22 +30,27 @@ export function TraceSheet({
   open: boolean;
   onClose: () => void;
 }) {
+  const { t } = useI18n();
   const trace = useTrace(sessionId, open);
   const events = trace.data ?? [];
   const drops = events.filter((e) => e.type === 'guardrail_drop');
+  const eventLabel = (type: string): string => {
+    const key = EVENT_KEYS[type];
+    return key ? t(key) : type;
+  };
 
   return (
-    <Sheet open={open} onClose={onClose} title="Trazabilidad">
-      {trace.isLoading && <Spinner label="Cargando traza…" />}
+    <Sheet open={open} onClose={onClose} title={t('trace.title')}>
+      {trace.isLoading && <Spinner label={t('trace.loading')} />}
       {!trace.isLoading && events.length === 0 && (
-        <p className="text-sm text-gris-ev">Aún no hay traza para esta sesión.</p>
+        <p className="text-sm text-gris-ev">{t('trace.empty')}</p>
       )}
       <ol className="space-y-2">
         {events.map((e) => (
           <li key={e.seq} className="border-l-2 border-linea pl-3 text-sm">
             <div className="flex items-center gap-2">
               <span className="mono text-2xs text-gris-ev">{String(e.seq).padStart(2, '0')}</span>
-              <span className="font-semibold">{LABELS[e.type] ?? e.type}</span>
+              <span className="font-semibold">{eventLabel(e.type)}</span>
               {e.agentId && <span className="eyebrow">⚙ {e.agentId}</span>}
             </div>
             {Object.keys(e.payload).length > 0 && (
@@ -57,15 +63,14 @@ export function TraceSheet({
       </ol>
 
       <section className="mt-4 border-t border-linea pt-3">
-        <h3 className="eyebrow mb-1">Verificación</h3>
+        <h3 className="eyebrow mb-1">{t('trace.verification')}</h3>
         {drops.length === 0 ? (
-          <p className="text-sm text-gris-ev">
-            No se descartaron afirmaciones por falta de evidencia.
-          </p>
+          <p className="text-sm text-gris-ev">{t('trace.noDrops')}</p>
         ) : (
           <p className="text-sm text-ambar">
-            {drops.reduce((n, d) => n + Number(d.payload.count ?? 0), 0)} afirmación(es) descartada(s)
-            por el guardrail de evidencia.
+            {t('trace.drops', {
+              n: drops.reduce((n, d) => n + Number(d.payload.count ?? 0), 0),
+            })}
           </p>
         )}
       </section>

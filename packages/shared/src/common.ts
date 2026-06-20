@@ -104,3 +104,60 @@ export const PeruLocation = z.object({
   distrito: z.string().optional(),
 });
 export type PeruLocation = z.infer<typeof PeruLocation>;
+
+/**
+ * Presentation language. Spanish (es-PE) is the canonical source language —
+ * the OEFA data, corpus and legal terms are authoritative in Spanish. English
+ * is a presentation-layer localization. Extend by adding a code here and the
+ * matching catalog/label entries; consumers are typed against this enum.
+ */
+export const Language = z.enum(['es', 'en']);
+export type Language = z.infer<typeof Language>;
+
+/** Default language when a request/state omits one (backward-compatible). */
+export const DEFAULT_LANGUAGE: Language = 'es';
+
+/** A label rendered per language. Add a key here when {@link Language} grows. */
+export type LocalizedLabel = Record<Language, string>;
+
+/**
+ * Display labels for the Spanish-valued domain enums. The enum *values* stay as
+ * stored keys (no persistence migration); these maps are the single source of
+ * truth for how the API and web render them per language.
+ */
+export const CONFIDENCE_LABELS: Record<ConfidenceLabel, LocalizedLabel> = {
+  directa: { es: 'Evidencia directa', en: 'Direct evidence' },
+  inferencia: { es: 'Inferencia', en: 'Inference' },
+  sin_evidencia: { es: 'Sin evidencia suficiente', en: 'Insufficient evidence' },
+};
+
+export const WARNING_SEVERITY_LABELS: Record<WarningSeverity, LocalizedLabel> = {
+  Informativa: { es: 'Informativa', en: 'Informational' },
+  Advertencia: { es: 'Advertencia', en: 'Warning' },
+  Crítica: { es: 'Crítica', en: 'Critical' },
+};
+
+export const RISK_SEVERITY_LABELS: Record<RiskSeverity, LocalizedLabel> = {
+  Baja: { es: 'Baja', en: 'Low' },
+  Media: { es: 'Media', en: 'Medium' },
+  Alta: { es: 'Alta', en: 'High' },
+  Crítica: { es: 'Crítica', en: 'Critical' },
+};
+
+export const RESOLUTION_STATUS_LABELS: Record<ResolutionStatus, LocalizedLabel> = {
+  firme: { es: 'Firme (consentida)', en: 'Final (consented)' },
+  apelada: { es: 'Apelada', en: 'Under appeal' },
+  anulada: { es: 'Anulada', en: 'Annulled' },
+  archivada: { es: 'Archivada', en: 'Archived' },
+  en_proceso: { es: 'En proceso', en: 'In progress' },
+  desconocido: { es: 'Desconocido', en: 'Unknown' },
+};
+
+/** Render a localized label, falling back to the raw value if unmapped. */
+export function localizeLabel(
+  map: Record<string, LocalizedLabel>,
+  value: string,
+  language: Language,
+): string {
+  return map[value]?.[language] ?? value;
+}

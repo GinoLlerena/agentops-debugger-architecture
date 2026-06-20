@@ -2,16 +2,17 @@ import type { EvidenceItem } from '@agentops/shared';
 import { useEffect, useState } from 'react';
 import type { ChatState } from '../lib/agent-stream.js';
 import { useReport } from '../lib/api.js';
+import { useI18n, type MessageKey } from '../i18n/index.js';
 import { ChartView } from './charts.js';
 import { EvidenceChip } from './evidence.js';
 import { ReportView } from './ReportView.js';
 
 type Tab = 'resumen' | 'datos' | 'documentos' | 'informe';
-const TABS: { id: Tab; label: string }[] = [
-  { id: 'resumen', label: 'Resumen' },
-  { id: 'datos', label: 'Datos OEFA' },
-  { id: 'documentos', label: 'Documentos' },
-  { id: 'informe', label: 'Informe' },
+const TABS: { id: Tab; labelKey: MessageKey }[] = [
+  { id: 'resumen', labelKey: 'tab.resumen' },
+  { id: 'datos', labelKey: 'tab.datos' },
+  { id: 'documentos', labelKey: 'tab.documentos' },
+  { id: 'informe', labelKey: 'tab.informe' },
 ];
 
 /** Canvas: "chat drives, canvas remembers" (UX §4.2). Tabs as expediente file-tabs. */
@@ -22,6 +23,7 @@ export function Canvas({
   state: ChatState;
   onOpenEvidence: (item: EvidenceItem) => void;
 }) {
+  const { t } = useI18n();
   const [tab, setTab] = useState<Tab>('resumen');
   // Honor the agent's open_tab request (≤1 auto-switch per turn).
   useEffect(() => {
@@ -43,17 +45,17 @@ export function Canvas({
   return (
     <div className="flex h-full flex-col">
       <div className="flex gap-1 border-b border-linea bg-papel px-3 pt-2">
-        {TABS.map((t) => (
+        {TABS.map((tabDef) => (
           <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
+            key={tabDef.id}
+            onClick={() => setTab(tabDef.id)}
             className={`rounded-t-card border border-b-0 px-3 py-1.5 text-sm ${
-              tab === t.id
+              tab === tabDef.id
                 ? 'border-linea bg-superficie font-semibold text-verde-tinta'
                 : 'border-transparent text-gris-ev hover:text-verde-tinta'
             }`}
           >
-            {t.label}
+            {t(tabDef.labelKey)}
           </button>
         ))}
       </div>
@@ -88,14 +90,14 @@ export function Canvas({
               )}
             </div>
           ) : (
-            <EmptyState text="Sin datos para esta sesión todavía." />
+            <EmptyState textKey="canvas.empty.datos" />
           ))}
 
         {tab === 'documentos' &&
           (docEvidence.length ? (
             <EvidenceList items={docEvidence} labelFor={labelFor} onOpenEvidence={onOpenEvidence} dense />
           ) : (
-            <EmptyState text="Sin documentos recuperados todavía." />
+            <EmptyState textKey="canvas.empty.documentos" />
           ))}
 
         {tab === 'informe' && <InformeTab reportId={state.reportId} onOpenEvidence={onOpenEvidence} evidence={state.evidence} />}
@@ -144,17 +146,18 @@ function InformeTab({
 }) {
   const report = useReport(reportId);
   if (!reportId) {
-    return <EmptyState text="El informe estructurado se generará tras la aprobación (HITL)." />;
+    return <EmptyState textKey="canvas.empty.reportPending" />;
   }
-  if (report.isLoading) return <EmptyState text="Cargando informe…" />;
-  if (!report.data) return <EmptyState text="No se pudo cargar el informe." />;
+  if (report.isLoading) return <EmptyState textKey="canvas.empty.reportLoading" />;
+  if (!report.data) return <EmptyState textKey="canvas.empty.reportError" />;
   return <ReportView report={report.data} evidence={evidence} onOpenEvidence={onOpenEvidence} />;
 }
 
-function EmptyState({ text = 'El panel se irá llenando con la evidencia de tu investigación.' }) {
+function EmptyState({ textKey = 'canvas.empty.default' }: { textKey?: MessageKey }) {
+  const { t } = useI18n();
   return (
     <div className="flex h-full min-h-32 items-center justify-center rounded-card border border-dashed border-linea text-sm text-gris-ev">
-      {text}
+      {t(textKey)}
     </div>
   );
 }

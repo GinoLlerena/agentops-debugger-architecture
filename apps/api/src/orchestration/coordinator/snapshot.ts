@@ -61,6 +61,7 @@ export function buildSessionSnapshot(state: OrchestratorState): SessionSnapshot 
   const base = {
     sessionId: state.sessionId,
     status: state.executionStatus,
+    language: state.language,
     userMessage: request?.text ?? '',
     evidence: collectEvidence(state),
     charts: suppressed ? [] : collectCharts(state),

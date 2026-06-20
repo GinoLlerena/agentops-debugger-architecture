@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ExecutionStatus, Id, IsoTimestamp } from './common.js';
+import { ExecutionStatus, Id, IsoTimestamp, Language, DEFAULT_LANGUAGE } from './common.js';
 import { ChartSpec } from './chart.js';
 import { EvidenceItem } from './evidence.js';
 import { SubjectEntity } from './report.js';
@@ -55,6 +55,8 @@ export type SessionSnapshotPending = z.infer<typeof SessionSnapshotPending>;
 export const SessionSnapshot = z.object({
   sessionId: Id,
   status: ExecutionStatus,
+  /** The language the run was executed in, so rehydration renders consistently. */
+  language: Language.default(DEFAULT_LANGUAGE),
   userMessage: z.string(),
   evidence: z.array(EvidenceItem).default([]),
   charts: z.array(ChartSpec).default([]),

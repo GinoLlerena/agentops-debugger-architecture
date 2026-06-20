@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ExecutionStatus, Id, IsoTimestamp } from './common.js';
+import { ExecutionStatus, Id, IsoTimestamp, Language, DEFAULT_LANGUAGE } from './common.js';
 import { ArtifactRecord } from './evidence.js';
 import { LedgerEvent } from './ledger.js';
 import { ClarificationRequest, DomainTaskPacket, DomainTaskResult } from './tasks.js';
@@ -39,6 +39,9 @@ export const OrchestratorState = z.object({
   threadId: Id,
   sessionId: Id,
   executionStatus: ExecutionStatus,
+  // Presentation language for this run, set from the request and persisted so a
+  // reopened session (rehydrate) renders in the same language it was run in.
+  language: Language.default(DEFAULT_LANGUAGE),
 
   workspace: z.object({
     domains: z.record(z.unknown()).default({}),
