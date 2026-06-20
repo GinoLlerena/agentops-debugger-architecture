@@ -178,6 +178,20 @@ describe('Coordinator — happy path', () => {
     expect(state.language).toBe('en');
     expect(buildSessionSnapshot(state).language).toBe('en');
   });
+
+  it('localizes the default failure summary to the run language', async () => {
+    const planner = staticPlanner({
+      kind: 'plan',
+      reasoning: 'r',
+      tasks: [task({ taskId: 't1', domain: 'oefa_data', operation: 'search' })],
+    });
+    const agents = agentMap(
+      fnAgent(AGENT_IDS.data, async (t) => result(t.taskId, AGENT_IDS.data, { status: 'failed' })),
+    );
+    const coord = createCoordinator({ planner, agents, ...deterministic });
+    const state = await coord.start({ text: 'q', sessionId: 's1', language: 'en', requestContext: {} });
+    expect(state.finalResponseDraft).toContain('could not be completed');
+  });
 });
 
 describe('Coordinator — evidence guardrail (FR-41)', () => {

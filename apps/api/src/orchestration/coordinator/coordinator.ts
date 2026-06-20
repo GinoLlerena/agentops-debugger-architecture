@@ -15,6 +15,7 @@ import {
 } from '../manifests/registry.js';
 import { applyEvidenceGuardrail, collectKnownEvidenceIds } from './guardrail.js';
 import { collectEvidence, UI_SUPPRESSED_KEY } from './snapshot.js';
+import { messages } from '../../i18n/messages.js';
 import type {
   Coordinator,
   CoordinatorDeps,
@@ -133,8 +134,7 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
     } catch (err) {
       state.executionStatus = 'failed';
       ledger(state, 'error', { code: 'planner_error', message: errMsg(err) });
-      state.finalResponseDraft =
-        'No se pudo planificar la consulta en este momento. Intenta nuevamente.';
+      state.finalResponseDraft = messages(state.language).coord.planFailed;
       return finalize(state, onProgress);
     }
 
@@ -168,8 +168,7 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
           code: 'max_task_steps',
           message: `Se alcanzó el límite de ${maxTaskSteps} pasos; resultado parcial.`,
         });
-        state.finalResponseDraft ??=
-          'Se alcanzó el límite de pasos del agente. Se devuelve un resultado parcial.';
+        state.finalResponseDraft ??= messages(state.language).coord.partialResult;
         break;
       }
       steps++;
@@ -397,7 +396,7 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
         if (interrupt.taskId) {
           state.pendingTasks = state.pendingTasks.filter((t) => t.taskId !== interrupt.taskId);
         }
-        state.finalResponseDraft = 'La acción fue cancelada. No se guardó ni exportó nada.';
+        state.finalResponseDraft = messages(state.language).coord.actionCancelled;
         return finalize(state, onProgress, { suppressUi: true });
       }
       if (interrupt.taskId) markApproved(state, interrupt.taskId);
@@ -452,11 +451,12 @@ function defaultSummary(state: OrchestratorState): string {
     .map((t) => t.summary.trim())
     .filter(Boolean);
   if (summaries.length > 0) return summaries.join(' ');
-  if (state.completedTasks.length === 0) return 'No se realizaron acciones.';
+  const m = messages(state.language);
+  if (state.completedTasks.length === 0) return m.coord.noActions;
   // No successful task. Distinguish "ran but found nothing" from "everything errored".
   const failed = state.completedTasks.filter((t) => t.status === 'failed').length;
   if (failed > 0) {
-    return `No se pudo completar la consulta: ${failed} de ${state.completedTasks.length} tarea(s) presentaron errores.`;
+    return m.coord.tasksFailed(failed, state.completedTasks.length);
   }
-  return 'No encontré evidencia en las fuentes consultadas.';
+  return m.noEvidence;
 }

@@ -9,6 +9,7 @@ import type {
 import type { CompanyStats } from '../../services/oefa/oefa-service.js';
 import { buildReport } from '../../services/report/build-report.js';
 import type { ReportStore } from '../../persistence/report-store.js';
+import { messages } from '../../i18n/messages.js';
 import { AGENT_IDS } from '../manifests/registry.js';
 import type { AgentRunContext, SpecialistAgent } from '../coordinator/types.js';
 
@@ -38,9 +39,10 @@ export function createOfflineReportAgent(
   return {
     agentId: AGENT_IDS.report,
     async run(task: DomainTaskPacket, ctx: AgentRunContext): Promise<DomainTaskResult> {
+      const m = messages(ctx.state.language);
       const data = findRecordSet(ctx);
       if (!data || data.records.length === 0) {
-        return mk(AGENT_IDS.report, task, 'completed', 'No hay datos suficientes para el informe.', {});
+        return mk(AGENT_IDS.report, task, 'completed', m.insufficientData, {});
       }
       const evidence = collectEvidence(ctx);
       const entity = { administrado: data.records[0]!.administrado, ruc: data.records[0]!.ruc };
@@ -58,6 +60,7 @@ export function createOfflineReportAgent(
         coverage: data.records[0]!.coverage,
         asOf: clock().toISOString(),
         agentVersion: '0.1.0',
+        language: ctx.state.language,
       });
       // Persist the draft so the client can render it during the approval gate.
       await reportStore.save(report);
@@ -69,7 +72,7 @@ export function createOfflineReportAgent(
         summary: report.title,
         data: report,
       };
-      return mk(AGENT_IDS.report, task, 'completed', `Borrador de informe generado: ${report.title}.`, {
+      return mk(AGENT_IDS.report, task, 'completed', m.draftGenerated(report.title), {
         artifacts: [artifact],
         findings: report.findings,
       });
@@ -81,15 +84,16 @@ export function createOfflineReportManager(reportStore: ReportStore): Specialist
   return {
     agentId: AGENT_IDS.reportManager,
     async run(task: DomainTaskPacket, ctx: AgentRunContext): Promise<DomainTaskResult> {
+      const m = messages(ctx.state.language);
       const draft = Object.values(ctx.artifacts).find((a) => a.kind === 'report_draft');
       if (!draft) {
-        return mk(AGENT_IDS.reportManager, task, 'failed', 'No hay un borrador de informe para guardar.', {
+        return mk(AGENT_IDS.reportManager, task, 'failed', m.noDraft, {
           errors: [{ code: 'no_draft', message: 'Sin borrador', recoverable: false }],
         });
       }
       const saved = await reportStore.setStatus(draft.id, 'approved');
       const title = (saved as Report | undefined)?.title ?? 'Informe';
-      return mk(AGENT_IDS.reportManager, task, 'completed', `Informe guardado y aprobado: ${title}.`, {});
+      return mk(AGENT_IDS.reportManager, task, 'completed', m.reportSaved(title), {});
     },
   };
 }

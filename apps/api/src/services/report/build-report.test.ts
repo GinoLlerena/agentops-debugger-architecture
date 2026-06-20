@@ -61,4 +61,19 @@ describe('buildReport', () => {
     const report = buildReport({ ...input, evidence: [] });
     expect(report.findings[0]!.confidence).toBe('sin_evidencia');
   });
+
+  it('localizes the report to English when requested (content + date + tag)', () => {
+    const report = buildReport({ ...input, language: 'en' });
+    expect(Report.safeParse(report).success).toBe(true);
+    expect(report.language).toBe('en');
+    expect(report.title).toContain('Environmental Background Report');
+    expect(report.findings[0]!.statement).toContain('administrative act');
+    expect(report.warnings.some((w) => w.statement.includes('non-final resolution'))).toBe(true);
+    expect(report.recommendations[0]!.text).toContain('recommended');
+    expect(report.confidentialityLabel).toBe('Confidential');
+    // en-US date (M/D/YYYY) rather than es-PE (D/M/YYYY)
+    expect(report.issueDate).toBe(new Date(input.asOf).toLocaleDateString('en-US'));
+    // severity enum value stays the canonical stored key (not translated)
+    expect(report.executiveSummary.riskLevel).toBe('Crítica');
+  });
 });

@@ -1,5 +1,13 @@
-import type { ChartSpec, OefaRecord } from '@agentops/shared';
+import {
+  DEFAULT_LANGUAGE,
+  RESOLUTION_STATUS_LABELS,
+  localizeLabel,
+  type ChartSpec,
+  type Language,
+  type OefaRecord,
+} from '@agentops/shared';
 import { recordYear } from '../oefa/oefa-service.js';
+import { messages } from '../../i18n/messages.js';
 
 /**
  * Build chart specs from a set of normalized OEFA records (the agent emits these
@@ -13,12 +21,15 @@ export interface ChartContext {
   asOf: string; // DD/MM/AAAA or ISO
   producedByAgentId?: string;
   entityLabel?: string; // for chart titles ("… de La Pampilla")
+  language?: Language; // titles/units localized to the run's language
 }
 
 const STATUS_ORDER = ['firme', 'apelada', 'en_proceso', 'anulada', 'archivada', 'desconocido'];
 
 export function buildOefaCharts(records: OefaRecord[], ctx: ChartContext): ChartSpec[] {
   if (records.length === 0) return [];
+  const language = ctx.language ?? DEFAULT_LANGUAGE;
+  const m = messages(language);
   const charts: ChartSpec[] = [];
   const stamp = { source: ctx.source, coverage: ctx.coverage, asOf: ctx.asOf, producedByAgentId: ctx.producedByAgentId };
 
@@ -34,7 +45,7 @@ export function buildOefaCharts(records: OefaRecord[], ctx: ChartContext): Chart
     charts.push({
       id: 'oefa-sanciones-por-anio',
       kind: 'bar',
-      title: '¿Cuánto suma la multa por año?',
+      title: m.chartFinesByYear,
       unit: 'UIT',
       series: [...byYearUit.entries()]
         .sort((a, b) => a[0] - b[0])
@@ -56,9 +67,14 @@ export function buildOefaCharts(records: OefaRecord[], ctx: ChartContext): Chart
     charts.push({
       id: 'oefa-distribucion-estado',
       kind: 'severity',
-      title: '¿Cómo se distribuyen las resoluciones por estado?',
-      unit: 'registros',
-      series: ordered.map((s) => ({ label: s, value: byStatus.get(s)!, category: s })),
+      title: m.chartStatusDistribution,
+      unit: m.unitRecords,
+      // label localized for display; category stays the canonical status key (color mapping).
+      series: ordered.map((s) => ({
+        label: localizeLabel(RESOLUTION_STATUS_LABELS, s, language),
+        value: byStatus.get(s)!,
+        category: s,
+      })),
       ...stamp,
     });
   }
@@ -77,9 +93,9 @@ export function buildOefaCharts(records: OefaRecord[], ctx: ChartContext): Chart
     charts.push({
       id: 'oefa-linea-de-tiempo',
       kind: 'timeline',
-      title: ctx.entityLabel ? `Línea de tiempo procesal · ${ctx.entityLabel}` : 'Línea de tiempo procesal',
+      title: ctx.entityLabel ? m.chartTimelineEntity(ctx.entityLabel) : m.chartTimeline,
       series: milestones.map(({ r, date }) => ({
-        label: r.resolucionMulta ?? r.resolucionDirectoral ?? r.expediente ?? 'Acto administrativo',
+        label: r.resolucionMulta ?? r.resolucionDirectoral ?? r.expediente ?? m.timelineFallbackLabel,
         date,
         category: r.resolutionStatus,
         value: r.fineAmountUit,

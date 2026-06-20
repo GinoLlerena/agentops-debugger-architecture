@@ -4,7 +4,7 @@ import { z } from 'zod';
 import type { QwenProvider } from '../../services/qwen/qwen-provider.js';
 import { AGENT_IDS, AGENT_MANIFESTS } from '../manifests/registry.js';
 import type { Planner, PlanResult } from '../coordinator/types.js';
-import { COORDINATOR_PROMPT } from './prompts.js';
+import { COORDINATOR_PROMPT, languageDirective } from './prompts.js';
 
 const PlanOutputSchema = z.object({
   kind: z.enum(['plan', 'clarification', 'reply']),
@@ -36,7 +36,7 @@ export function createQwenPlanner(qwen: QwenProvider): Planner {
 
   return {
     async plan({ request }): Promise<PlanResult> {
-      const res = await agent.generate(request.text, {
+      const res = await agent.generate(`${languageDirective(request.language)}\n\n${request.text}`, {
         structuredOutput: { schema: PlanOutputSchema },
       });
       const out = res.object as z.infer<typeof PlanOutputSchema>;
