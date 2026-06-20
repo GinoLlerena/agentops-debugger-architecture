@@ -13,10 +13,9 @@ export { applyEvidenceGuardrail, collectKnownEvidenceIds } from './coordinator/g
 export { toMastraTool, toMastraTools } from './agents/mastra-tool.js';
 export {
   toSpecialistAgent,
+  toLiveDataAgent,
   createSpecialistAgents,
   createDataMastraAgent,
   createDocsMastraAgent,
-  createReportMastraAgent,
-  createReportManagerMastraAgent,
 } from './agents/specialists.js';
 export { createQwenPlanner } from './agents/planner.js';

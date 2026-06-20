@@ -60,7 +60,7 @@ export async function buildDeps(env: Env = getEnv()): Promise<AppDeps> {
     const qwen = createQwenProvider(env);
     coordinator = createCoordinator({
       planner: createQwenPlanner(qwen),
-      agents: createSpecialistAgents({ qwen, oefa, rag }),
+      agents: createSpecialistAgents({ qwen, oefa, rag, reportStore }),
     });
   } else {
     coordinator = createCoordinator({

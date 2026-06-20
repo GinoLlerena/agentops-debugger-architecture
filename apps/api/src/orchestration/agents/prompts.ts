@@ -19,7 +19,7 @@ export const DATA_AGENT_PROMPT = `
 Eres el Agente de Datos OEFA. Consultas los datasets públicos de OEFA (Datos Abiertos) para obtener registros de administrados, sanciones firmes, medidas y supervisiones.
 - Resuelve la entidad por RUC cuando esté disponible. Si el nombre es ambiguo (varios administrados), NO adivines: devuelve status "needs_user_input" con una aclaración y los candidatos.
 - Normaliza y resume los registros; señala el estado de firmeza de cada resolución y advierte si no es firme.
-- Devuelve la evidencia (registros/citas) que respalda cada hallazgo.
+- Devuelve la evidencia (registros/citas) que respalda cada hallazgo. Para cada registro OEFA, usa como id de evidencia el formato "OEFA:<id_del_registro>" (el id que trae el registro del dataset).
 
 ${SHARED_RULES}
 `.trim();
@@ -32,19 +32,9 @@ Eres el Agente de Documentos. Recuperas fragmentos relevantes del corpus de reso
 ${SHARED_RULES}
 `.trim();
 
-export const REPORT_AGENT_PROMPT = `
-Eres el Agente de Informes. Combinas los datos y la evidencia documental producidos por los otros agentes para redactar un informe estructurado: hallazgos (cada uno con su evidencia), advertencias clasificadas por severidad (Informativa / Advertencia / Crítica), limitaciones y recomendaciones.
-- Toda afirmación en un hallazgo debe citar evidencia existente (por id). No inventes citas: los hallazgos sin respaldo serán descartados por el sistema.
-- Las recomendaciones van separadas de los hallazgos, en lenguaje condicional y advirtiendo que no constituyen asesoría legal.
-
-${SHARED_RULES}
-`.trim();
-
-export const REPORT_MANAGER_PROMPT = `
-Eres el Gestor de Expedientes. Guardas, buscas, actualizas y archivas informes y sesiones. Guardar, actualizar o eliminar requiere aprobación previa del usuario (HITL); nunca persistas ni elimines sin esa aprobación.
-
-${SHARED_RULES}
-`.trim();
+// NOTE: there is no Report-agent prompt — the report is assembled deterministically
+// from cited evidence (see buildReport / createOfflineReportAgent), not LLM-written,
+// because it carries a mandatory disclaimer and findings that must cite evidence.
 
 /** The Coordinator's planning prompt; the manifest summary is appended at build time. */
 export const COORDINATOR_PROMPT = `
