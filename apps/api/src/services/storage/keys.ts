@@ -11,6 +11,7 @@ export const COLLECTIONS = {
   snapshots: 'workflow_snapshot',
   oefaCache: 'oefa_cache',
   documents: 'document',
+  translation: 'translation',
 } as const;
 
 export type CollectionName = (typeof COLLECTIONS)[keyof typeof COLLECTIONS];

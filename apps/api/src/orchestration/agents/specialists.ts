@@ -23,6 +23,7 @@ import { AGENT_IDS } from '../manifests/registry.js';
 import type { AgentRunContext, SpecialistAgent } from '../coordinator/types.js';
 import { toMastraTools } from './mastra-tool.js';
 import { DATA_AGENT_PROMPT, DOCS_AGENT_PROMPT, languageDirective } from './prompts.js';
+import { NoopTranslator, translateQuery, type Translator } from '../../services/translation/index.js';
 
 /**
  * Structured output we ask each specialist LLM to return. The orchestrator then
@@ -153,7 +154,11 @@ function entityFromEvidence(evidence: EvidenceItem[], records: OefaRecord[]): st
  * The artifact step is pure and reuses the same builder as the offline agent,
  * so live and offline produce identical structured data over the same records.
  */
-export function toLiveDataAgent(agent: Agent, oefa: OefaService): SpecialistAgent {
+export function toLiveDataAgent(
+  agent: Agent,
+  oefa: OefaService,
+  translator: Translator = new NoopTranslator(),
+): SpecialistAgent {
   const narrator = toSpecialistAgent(AGENT_IDS.data, agent);
   return {
     agentId: AGENT_IDS.data,
@@ -164,7 +169,10 @@ export function toLiveDataAgent(agent: Agent, oefa: OefaService): SpecialistAgen
       if (result.status !== 'completed') return result;
       const original = ctx.state.workspace.sharedFacts.originalRequest as { text?: string } | undefined;
       const clarified = strInput(task.inputs.clarificationAnswer);
-      const query = clarified ?? strInput(task.inputs.query) ?? original?.text ?? task.instruction;
+      const rawQuery = strInput(task.inputs.query) ?? original?.text ?? task.instruction;
+      // Inbound edge: the entity heuristic matches over the Spanish corpus, so a
+      // non-Spanish query is translated first (a clarification answer is verbatim).
+      const query = clarified ?? (await translateQuery(rawQuery, ctx.state.language, translator));
       const base = await oefa.getRecords();
       // Resolve the entity the artifacts describe: a clarification answer is
       // authoritative; else anchor to the company the LLM cited; else fall back
@@ -203,13 +211,15 @@ export function createSpecialistAgents(deps: {
   oefa: OefaService;
   rag: RagService;
   reportStore: ReportStore;
+  translator?: Translator;
   idgen?: () => string;
   clock?: () => Date;
 }): Record<string, SpecialistAgent> {
   const idgen = deps.idgen ?? (() => crypto.randomUUID().split('-')[0]!);
   const clock = deps.clock ?? (() => new Date());
+  const translator = deps.translator ?? new NoopTranslator();
   return {
-    [AGENT_IDS.data]: toLiveDataAgent(createDataMastraAgent(deps.qwen, deps.oefa), deps.oefa),
+    [AGENT_IDS.data]: toLiveDataAgent(createDataMastraAgent(deps.qwen, deps.oefa), deps.oefa, translator),
     [AGENT_IDS.docs]: toSpecialistAgent(AGENT_IDS.docs, createDocsMastraAgent(deps.qwen, deps.rag)),
     [AGENT_IDS.report]: createOfflineReportAgent(deps.reportStore, idgen, clock),
     [AGENT_IDS.reportManager]: createOfflineReportManager(deps.reportStore),

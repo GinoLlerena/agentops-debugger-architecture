@@ -9,6 +9,7 @@ import type {
   Resumption,
   StreamEvent,
 } from '@agentops/shared';
+import type { Translator } from '../../services/translation/index.js';
 
 export type { Resumption };
 
@@ -53,6 +54,8 @@ export interface CoordinatorDeps {
   registry?: AgentManifestRegistry;
   /** Runaway-loop backstop (architecture §5.2). Default 12. */
   maxTaskSteps?: number;
+  /** Outbound citation localization at the response edge. Default: no-op (offline). */
+  translator?: Translator;
   /** Injectable for deterministic tests. */
   clock?: () => Date;
   idgen?: () => string;
