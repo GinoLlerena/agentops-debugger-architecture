@@ -1,4 +1,5 @@
 import {
+  DEFAULT_LANGUAGE,
   type DomainTaskPacket,
   type DomainTaskResult,
   type LedgerEvent,
@@ -16,6 +17,7 @@ import {
 import { applyEvidenceGuardrail, collectKnownEvidenceIds } from './guardrail.js';
 import { collectEvidence, UI_SUPPRESSED_KEY } from './snapshot.js';
 import { messages } from '../../i18n/messages.js';
+import { localizeEvidence, NoopTranslator } from '../../services/translation/index.js';
 import type {
   Coordinator,
   CoordinatorDeps,
@@ -46,6 +48,7 @@ const noop: OnProgress = () => {};
 export function createCoordinator(deps: CoordinatorDeps): Coordinator {
   const registry = deps.registry ?? AGENT_MANIFESTS;
   const maxTaskSteps = deps.maxTaskSteps ?? DEFAULT_MAX_TASK_STEPS;
+  const translator = deps.translator ?? new NoopTranslator();
   const clock = deps.clock ?? (() => new Date());
   let counter = 0;
   const idgen = deps.idgen ?? (() => `id-${++counter}`);
@@ -318,16 +321,33 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
     return false;
   }
 
-  function finalize(
+  /** Translate every collected citation into the run's language at the response
+   *  edge, keeping the Spanish source as a sidecar ("show original"). Mutates the
+   *  evidence on each completed task so the persisted state — and any later
+   *  rehydration snapshot — carries the localized citations. Idempotent and a
+   *  no-op for Spanish/offline. */
+  async function localizeCitations(state: OrchestratorState): Promise<void> {
+    if (state.language === DEFAULT_LANGUAGE) return;
+    // Tasks localize independently; run them concurrently (CachedTranslator dedups
+    // any passage shared across tasks/turns) rather than serializing per task.
+    await Promise.all(
+      state.completedTasks.map(async (task) => {
+        task.evidence = await localizeEvidence(task.evidence, state.language, translator);
+      }),
+    );
+  }
+
+  async function finalize(
     state: OrchestratorState,
     onProgress: OnProgress,
     opts: { suppressUi?: boolean } = {},
-  ): OrchestratorState {
+  ): Promise<OrchestratorState> {
     if (state.executionStatus !== 'failed') state.executionStatus = 'completed';
     state.pendingClarification = undefined; // terminal: no card to restore
     // Persist the UI-suppression decision so a reopened cancelled/denied run
     // doesn't resurface the draft report/charts the live run intentionally hid.
     if (opts.suppressUi) state.workspace.sharedFacts[UI_SUPPRESSED_KEY] = true;
+    await localizeCitations(state);
     const evidence = collectEvidence(state);
     const text = state.finalResponseDraft ?? defaultSummary(state);
     state.finalResponseDraft = text;

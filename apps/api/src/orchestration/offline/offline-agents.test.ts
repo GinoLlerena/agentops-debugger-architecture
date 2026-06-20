@@ -7,6 +7,7 @@ import {
 import { createOfflineDataAgent, createOfflinePlanner } from './offline-agents.js';
 import { InMemoryOefaCache } from '../../services/oefa/oefa-cache.js';
 import { OefaService, SeedRecordSource } from '../../services/oefa/oefa-service.js';
+import type { Translator } from '../../services/translation/index.js';
 import type { AgentRunContext } from '../coordinator/types.js';
 
 function rec(p: Partial<OefaRecord> & { id: string; administrado: string }): OefaRecord {
@@ -94,5 +95,38 @@ describe('offline data agent — localized narrative', () => {
   it('produces a Spanish finding by default', async () => {
     const result = await createOfflineDataAgent(service()).run(dataTask, ctx('es'));
     expect(result.findings[0]!.statement).toContain('acto(s) administrativo(s)');
+  });
+
+  it('translates an English free-text query to Spanish before entity resolution', async () => {
+    // The injected translator maps the English ask to a RUC the seed resolves;
+    // without translation (Noop) the same English text resolves to nothing.
+    const translator: Translator = {
+      async translate(text) {
+        return text === 'fines for the mining company' ? 'RUC 20543210981' : text;
+      },
+    };
+    const enQuery = {
+      ...dataTask,
+      inputs: { query: 'fines for the mining company' },
+    };
+    const translated = await createOfflineDataAgent(service(), translator).run(enQuery, ctx('en'));
+    expect(translated.status).toBe('completed');
+    expect(translated.findings[0]!.statement).toContain('Minera Las Bambas');
+
+    // control: no translator (offline Noop) → the English query resolves nothing
+    const untranslated = await createOfflineDataAgent(service()).run(enQuery, ctx('en'));
+    expect(untranslated.findings).toHaveLength(0);
+  });
+
+  it('uses a clarification answer verbatim (never translated)', async () => {
+    const translator: Translator = {
+      async translate() {
+        throw new Error('clarification answer must not be translated');
+      },
+    };
+    const task = { ...dataTask, inputs: { clarificationAnswer: '20543210981' } };
+    const result = await createOfflineDataAgent(service(), translator).run(task, ctx('en'));
+    expect(result.status).toBe('completed');
+    expect(result.findings[0]!.statement).toContain('Minera Las Bambas');
   });
 });

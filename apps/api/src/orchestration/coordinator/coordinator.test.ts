@@ -9,6 +9,7 @@ import type {
 import { AGENT_IDS } from '../manifests/registry.js';
 import { createCoordinator } from './coordinator.js';
 import { buildSessionSnapshot } from './snapshot.js';
+import type { Translator } from '../../services/translation/index.js';
 import type { AgentMap, Planner, PlanResult, SpecialistAgent } from './types.js';
 
 // ── test helpers ──────────────────────────────────────────────────────────────
@@ -191,6 +192,64 @@ describe('Coordinator — happy path', () => {
     const coord = createCoordinator({ planner, agents, ...deterministic });
     const state = await coord.start({ text: 'q', sessionId: 's1', language: 'en', requestContext: {} });
     expect(state.finalResponseDraft).toContain('could not be completed');
+  });
+});
+
+describe('Coordinator — outbound citation localization (5G-c)', () => {
+  const upper: Translator = { async translate(text) { return text.toUpperCase(); } };
+
+  function localizing(language: 'es' | 'en') {
+    const planner = staticPlanner({
+      kind: 'plan',
+      reasoning: 'r',
+      tasks: [task({ taskId: 't1', domain: 'oefa_data', operation: 'search' })],
+    });
+    const coord = createCoordinator({
+      planner,
+      agents: agentMap(okAgent(AGENT_IDS.data, { evidence: [evidence('E1')] })),
+      translator: upper,
+      ...deterministic,
+    });
+    return coord.start({ text: 'q', sessionId: 's1', language, requestContext: {} });
+  }
+
+  it('translates evidence + keeps the Spanish original as a sidecar (en)', async () => {
+    const state = await localizing('en');
+    const ev = state.completedTasks[0]!.evidence[0]!;
+    expect(ev.passage).toBe('PASSAGE');
+    expect(ev.passageOriginal).toBe('passage');
+    expect(ev.documentTitleOriginal).toBe('Doc');
+    expect(ev.originalLanguage).toBe('es');
+    // persisted on state → the rehydration snapshot carries the localized citation
+    expect(buildSessionSnapshot(state).evidence[0]!.passage).toBe('PASSAGE');
+  });
+
+  it('leaves citations untouched for the source language (es)', async () => {
+    const state = await localizing('es');
+    const ev = state.completedTasks[0]!.evidence[0]!;
+    expect(ev.passage).toBe('passage');
+    expect(ev.passageOriginal).toBeUndefined();
+    expect(ev.originalLanguage).toBeUndefined();
+  });
+
+  it('emits the localized evidence in the result event', async () => {
+    const events: StreamEvent[] = [];
+    const planner = staticPlanner({
+      kind: 'plan',
+      reasoning: 'r',
+      tasks: [task({ taskId: 't1', domain: 'oefa_data', operation: 'search' })],
+    });
+    const coord = createCoordinator({
+      planner,
+      agents: agentMap(okAgent(AGENT_IDS.data, { evidence: [evidence('E1')] })),
+      translator: upper,
+      ...deterministic,
+    });
+    await coord.start({ text: 'q', sessionId: 's1', language: 'en', requestContext: {} }, { onProgress: (e) => void events.push(e) });
+    const res = events.find((e) => e.type === 'result');
+    const ev = res && res.type === 'result' ? res.payload.evidence[0]! : undefined;
+    expect(ev?.passage).toBe('PASSAGE');
+    expect(ev?.passageOriginal).toBe('passage');
   });
 });
 

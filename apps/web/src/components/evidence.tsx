@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { CONFIDENCE_LABELS, localizeLabel, type EvidenceItem } from '@agentops/shared';
 import { useI18n } from '../i18n/index.js';
 import { Sheet } from './ui.js';
@@ -39,15 +40,42 @@ export function EvidenceDrawer({
   onClose: () => void;
 }) {
   const { t, language } = useI18n();
+  // Translated citations carry the Spanish source in the `*Original` sidecars;
+  // offer a social-media-style toggle so the user can verify against the source.
+  const [showOriginal, setShowOriginal] = useState(false);
+  useEffect(() => setShowOriginal(false), [item?.id]); // reset when a new citation opens
+  const hasOriginal =
+    item?.originalLanguage != null &&
+    (item.passageOriginal != null || item.documentTitleOriginal != null);
+  const original = Boolean(hasOriginal && showOriginal);
+  const passage = original ? (item?.passageOriginal ?? item?.passage) : item?.passage;
+  const documentTitle = original
+    ? (item?.documentTitleOriginal ?? item?.documentTitle)
+    : item?.documentTitle;
   return (
     <Sheet open={item !== null} onClose={onClose} title={t('evidence.title')} width={440}>
       {item && (
         <div className="space-y-3 text-sm">
           <p className="rounded-card border-l-2 border-verde-fiscal bg-papel p-3 leading-relaxed">
-            {item.passage}
+            {passage}
           </p>
+          {hasOriginal && (
+            <div className="flex items-center gap-2 text-xs">
+              <button
+                onClick={() => setShowOriginal((v) => !v)}
+                className="font-semibold text-azul-dato hover:underline"
+              >
+                {original ? t('evidence.showTranslation') : t('evidence.showOriginal')}
+              </button>
+              {original && (
+                <span className="rounded-chip bg-papel px-1.5 py-0.5 text-2xs text-gris-ev">
+                  {t('evidence.originalTag', { lang: item.originalLanguage!.toUpperCase() })}
+                </span>
+              )}
+            </div>
+          )}
           <dl className="space-y-1.5 text-xs text-gris-ev">
-            <Row label={t('evidence.document')} value={item.documentTitle} />
+            <Row label={t('evidence.document')} value={documentTitle ?? ''} />
             {item.resolutionNumber && (
               <Row label={t('evidence.resolution')} value={item.resolutionNumber} mono />
             )}

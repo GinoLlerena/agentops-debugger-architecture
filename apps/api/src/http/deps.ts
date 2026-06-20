@@ -20,6 +20,12 @@ import { createOfflineAgents, createOfflinePlanner } from '../orchestration/offl
 import { SessionStore } from '../persistence/session-store.js';
 import { ReportStore } from '../persistence/report-store.js';
 import { ReportExporter } from '../services/report/report-exporter.js';
+import {
+  CachedTranslator,
+  NoopTranslator,
+  QwenTranslator,
+  type Translator,
+} from '../services/translation/index.js';
 
 /** Everything the HTTP layer closes over. Built once at startup (or per test). */
 export interface AppDeps {
@@ -58,14 +64,21 @@ export async function buildDeps(env: Env = getEnv()): Promise<AppDeps> {
   let coordinator: Coordinator;
   if (live) {
     const qwen = createQwenProvider(env);
+    // Live translator: Qwen-backed, cached durably so a recurring passage costs
+    // one model call. Powers cross-lingual retrieval + translated citations.
+    const translator: Translator = new CachedTranslator(new QwenTranslator(qwen), stores.documents);
     coordinator = createCoordinator({
       planner: createQwenPlanner(qwen),
-      agents: createSpecialistAgents({ qwen, oefa, rag, reportStore }),
+      agents: createSpecialistAgents({ qwen, oefa, rag, reportStore, translator }),
+      translator,
     });
   } else {
+    // Offline: no model → no translation. Citations/queries stay canonical Spanish.
+    const translator: Translator = new NoopTranslator();
     coordinator = createCoordinator({
       planner: createOfflinePlanner(),
-      agents: createOfflineAgents({ oefa, rag, reportStore }),
+      agents: createOfflineAgents({ oefa, rag, reportStore, translator }),
+      translator,
     });
   }
 

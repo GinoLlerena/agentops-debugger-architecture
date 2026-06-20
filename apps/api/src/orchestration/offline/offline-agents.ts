@@ -12,6 +12,7 @@ import { createOfflineReportAgent, createOfflineReportManager } from './offline-
 import { foldAccents } from '../../services/util/text.js';
 import { buildDataArtifacts, entityQueryFor } from '../data-artifacts.js';
 import { messages } from '../../i18n/messages.js';
+import { NoopTranslator, translateQuery, type Translator } from '../../services/translation/index.js';
 import { AGENT_IDS } from '../manifests/registry.js';
 import type { AgentRunContext, Planner, PlanResult, SpecialistAgent } from '../coordinator/types.js';
 
@@ -108,13 +109,20 @@ function recordToEvidence(r: OefaRecord): EvidenceItem {
 }
 
 /** Offline DataAgent: resolves the entity over seed records; clarifies if ambiguous. */
-export function createOfflineDataAgent(oefa: OefaService): SpecialistAgent {
+export function createOfflineDataAgent(
+  oefa: OefaService,
+  translator: Translator = new NoopTranslator(),
+): SpecialistAgent {
   return {
     agentId: AGENT_IDS.data,
     async run(task: DomainTaskPacket, ctx: AgentRunContext): Promise<DomainTaskResult> {
       const m = messages(ctx.state.language);
       const answer = task.inputs.clarificationAnswer as string | undefined;
-      const query = answer ?? (task.inputs.query as string | undefined) ?? task.instruction;
+      const rawQuery = answer ?? (task.inputs.query as string | undefined) ?? task.instruction;
+      // Inbound edge: a free-text query in another language is translated to
+      // Spanish for retrieval/entity resolution; a clarification answer is an
+      // entity the user already picked, so it's used verbatim.
+      const query = answer ?? (await translateQuery(rawQuery, ctx.state.language, translator));
       const base = await oefa.getRecords();
       const entityQuery = answer ?? entityQueryFor(query, base.records);
       const profile = await oefa.getCompanyProfile(entityQuery);
@@ -176,15 +184,19 @@ export function createOfflineDataAgent(oefa: OefaService): SpecialistAgent {
 }
 
 /** Offline DocsAgent: retrieves grounding passages from the seed corpus. */
-export function createOfflineDocsAgent(rag: RagService): SpecialistAgent {
+export function createOfflineDocsAgent(
+  rag: RagService,
+  translator: Translator = new NoopTranslator(),
+): SpecialistAgent {
   return {
     agentId: AGENT_IDS.docs,
     async run(task: DomainTaskPacket, ctx: AgentRunContext): Promise<DomainTaskResult> {
       const m = messages(ctx.state.language);
-      const query =
-        (task.inputs.clarificationAnswer as string | undefined) ??
-        (task.inputs.query as string | undefined) ??
-        task.instruction;
+      const answer = task.inputs.clarificationAnswer as string | undefined;
+      const rawQuery = answer ?? (task.inputs.query as string | undefined) ?? task.instruction;
+      // Inbound edge: translate a free-text query to Spanish for BM25/RAG over the
+      // canonical-Spanish corpus; a clarification answer is used verbatim.
+      const query = answer ?? (await translateQuery(rawQuery, ctx.state.language, translator));
       const results = await rag.retrieve(query, { limit: 3 });
       if (results.length === 0) {
         return mkResult(AGENT_IDS.docs, task, 'completed', m.noDocs, {});
@@ -241,14 +253,16 @@ export function createOfflineAgents(deps: {
   oefa: OefaService;
   rag: RagService;
   reportStore: ReportStore;
+  translator?: Translator;
   idgen?: () => string;
   clock?: () => Date;
 }): Record<string, SpecialistAgent> {
   const idgen = deps.idgen ?? (() => crypto.randomUUID().split('-')[0]!);
   const clock = deps.clock ?? (() => new Date());
+  const translator = deps.translator ?? new NoopTranslator();
   return {
-    [AGENT_IDS.data]: createOfflineDataAgent(deps.oefa),
-    [AGENT_IDS.docs]: createOfflineDocsAgent(deps.rag),
+    [AGENT_IDS.data]: createOfflineDataAgent(deps.oefa, translator),
+    [AGENT_IDS.docs]: createOfflineDocsAgent(deps.rag, translator),
     [AGENT_IDS.report]: createOfflineReportAgent(deps.reportStore, idgen, clock),
     [AGENT_IDS.reportManager]: createOfflineReportManager(deps.reportStore),
   };
