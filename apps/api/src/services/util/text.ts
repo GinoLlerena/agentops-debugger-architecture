@@ -46,21 +46,23 @@ export function parseLocaleNumber(raw: string): number | undefined {
     const thousandSep = decimalSep === ',' ? '.' : ',';
     normalized = cleaned.split(thousandSep).join('').replace(decimalSep, '.');
   } else if (hasComma) {
-    const parts = cleaned.split(',');
-    normalized =
-      parts.length === 2 && parts[1]!.length > 0 && parts[1]!.length <= 2
-        ? parts.join('.') // decimal comma, e.g. "12,5" → 12.5
-        : parts.join(''); // thousands commas, e.g. "1,584,000" → 1584000
+    normalized = normalizeGrouped(cleaned, ','); // "12,5"→12.5, "1,584,000"→1584000
   } else if (hasDot) {
-    const parts = cleaned.split('.');
-    normalized =
-      parts.length === 2 && parts[1]!.length > 0 && parts[1]!.length <= 2
-        ? parts.join('.') // decimal dot, e.g. "12.5" → 12.5
-        : parts.join(''); // thousands dots, e.g. "1.584.000" → 1584000, "1.500" → 1500
+    normalized = normalizeGrouped(cleaned, '.'); // "12.5"→12.5, "1.584.000"→1584000, "1.500"→1500
   } else {
     normalized = cleaned; // plain integer
   }
 
   const n = Number(normalized);
   return Number.isFinite(n) ? n : undefined;
+}
+
+/** A single-separator number → JS-parseable string: a lone 1–2 digit trailing
+ *  group is a decimal, anything else is a thousands grouping. Shared by the
+ *  comma and dot branches so both separators disambiguate identically. */
+function normalizeGrouped(cleaned: string, sep: string): string {
+  const parts = cleaned.split(sep);
+  return parts.length === 2 && parts[1]!.length > 0 && parts[1]!.length <= 2
+    ? parts.join('.') // decimal separator
+    : parts.join(''); // thousands separators
 }

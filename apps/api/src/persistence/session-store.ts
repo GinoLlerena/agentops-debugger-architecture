@@ -98,7 +98,9 @@ function deriveSessionMeta(state: OrchestratorState): {
   } else {
     const recordSet = artifacts.find((a) => a.kind === 'record_set');
     const rec = (recordSet?.data as { records?: OefaRecord[] } | undefined)?.records?.[0];
-    if (rec) subjectEntity = { name: rec.administrado, ruc: rec.ruc };
+    // Require a name: a malformed artifact must not overwrite a prior valid
+    // subject with `{ name: undefined }` (which would still be truthy below).
+    if (rec?.administrado) subjectEntity = { name: rec.administrado, ruc: rec.ruc };
   }
 
   // Last result: a compact line from the final answer + a deduped evidence count.
