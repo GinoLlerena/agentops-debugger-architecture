@@ -131,13 +131,47 @@ pnpm -r build            # builds shared, api, web
 ```
 
 The backend is a single Node process: `node apps/api/dist/index.js` (listens on
-`PORT`, default `8787`). It loads `.env` via `dotenv` at startup.
+`PORT`, default `8787`). It loads `.env` via `dotenv` at startup. When
+`WEB_DIST_DIR` points at the built SPA (default `apps/web/dist`), **the same
+process also serves the front-end same-origin** — so one origin/container hosts
+the whole app (no CORS, no separate API base URL). API routes are matched first;
+any other GET falls back to `index.html` for client-side routing.
 
 ---
 
-## 6. Deploy the backend — pick one
+## 6. Deploy — pick one
 
-### Option A — ECS (simplest, recommended for the demo)
+### Option A — Docker (recommended; bundles API + SPA in one container)
+
+The repo ships a `Dockerfile` (+ `docker-compose.yml`). The image builds the
+whole workspace and runs the single Node process that serves the API **and** the
+SPA same-origin. Runs **offline with zero env**; pass credentials for live mode.
+
+```bash
+# Build + run locally (offline) — open http://localhost:8787
+docker compose up --build
+# or without compose:
+docker build -t agentops-debugger .
+docker run --rm -p 8787:8787 agentops-debugger
+
+# Live mode: put credentials in .env (see .env.example), then:
+docker run --rm -p 8787:8787 --env-file .env agentops-debugger
+# (docker compose up automatically loads .env if present)
+```
+
+Deploy the image to Alibaba: push to **ACR** (Container Registry), then run it on
+**ECS** (Docker), **Function Compute** (container function), or **Serverless App
+Engine (SAE)**. Set env vars in the platform's config, expose `PORT` (default
+`8787`), and front it with HTTPS. The container's `HEALTHCHECK` curls `/health`.
+
+```bash
+# Example: push to ACR
+docker tag agentops-debugger registry.<region>.aliyuncs.com/<ns>/agentops-debugger:latest
+docker login registry.<region>.aliyuncs.com
+docker push registry.<region>.aliyuncs.com/<ns>/agentops-debugger:latest
+```
+
+### Option B — ECS without Docker (plain Node)
 
 1. [ ] Launch an ECS instance (Ubuntu 22.04, 1–2 vCPU is plenty) in your region;
        open the security group for your chosen port (or 80/443 behind a proxy).
@@ -150,12 +184,11 @@ The backend is a single Node process: `node apps/api/dist/index.js` (listens on
        # or: pm2 start apps/api/dist/index.js --name agentops-api
        ```
 5. [ ] (Recommended) Put **Nginx** in front for TLS (443 → :8787).
-6. [ ] Serve the frontend: either host `apps/web/dist` as static files on the
-       same Nginx, or upload it to an OSS static-website bucket / deploy to a
-       static host. Point the SPA at the API origin (the dev proxy in
-       `apps/web/vite.config.ts` only applies to `pnpm dev`).
+6. [ ] Frontend: nothing extra — the API serves `apps/web/dist` same-origin
+       (`WEB_DIST_DIR`). Just `pnpm -r build` and run from the repo root. (The
+       Vite dev proxy in `apps/web/vite.config.ts` only applies to `pnpm dev`.)
 
-### Option B — Function Compute (serverless)
+### Option C — Function Compute (serverless)
 
 1. [ ] Create an FC **service** + an **HTTP-triggered function** using a
        **custom runtime** (Node 22) or a **container image** built from
@@ -169,7 +202,7 @@ The backend is a single Node process: `node apps/api/dist/index.js` (listens on
 5. [ ] Note FC's request timeout — long Qwen calls must finish within it;
        raise the function timeout if needed.
 
-> Tablestore + OSS reach is identical in both options. Prefer the **public**
+> Tablestore + OSS reach is identical across all options. Prefer the **public**
 > Tablestore endpoint unless the compute sits in the same VPC (then use the VPC
 > endpoint for lower latency + no public traffic).
 
@@ -223,7 +256,33 @@ Checklist:
 
 ---
 
-## 9. Security
+## 9. Cost-safe runbook (deploy → prove → stop)
+
+The hackathon requires **proof** of Alibaba Cloud deployment, **not** a 24/7 live
+URL: the rules accept *"a link to a website, functioning demo, **or a test
+build**,"* and judges *"are not required to test"* (see [`SUBMISSION.md`](./SUBMISSION.md)).
+So you do **not** need to keep compute running. Recommended flow:
+
+1. [ ] **Before anything**, set a **Budget + spending alert** (e.g. $20) in the
+       Alibaba Cloud console — the single best safety net.
+2. [ ] Develop entirely in **offline mode** (zero LLM cost; the app runs with no
+       keys). Keep `QWEN_MODEL=qwen-plus` — never `qwen-max` for bulk testing.
+3. [ ] Build + push the image (§6), start the ECS instance / FC function, set the
+       env from §1–4.
+4. [ ] Run the smoke test (§7) **and** the proof recording (§8) in a single
+       session — live `/agent/ask`, `/trace`, a report export to OSS, plus the
+       Tablestore/OSS consoles.
+5. [ ] **Stop or release the instance** the moment proof is captured. With the
+       container image, redeploy takes minutes if a judge ever asks.
+
+> If you instead publish a **persistent live URL** as your demo, the rules ask it
+> to stay reachable until the **Judging Period ends (Jul 31, 2026)** — budget
+> compute for that whole window. Submitting the **test build (Docker image) +
+> video** avoids that entirely. Worst-case costs are in `SUBMISSION.md`.
+
+---
+
+## 10. Security
 
 - [ ] Real keys live only in the compute env / secrets manager — **never** in
       git. `.env.example` ships placeholders only; `.env` is gitignored.

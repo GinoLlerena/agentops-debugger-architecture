@@ -1,0 +1,18 @@
+# Build inside the image — never copy host artifacts or secrets.
+node_modules
+**/node_modules
+dist
+**/dist
+.git
+.github
+*.log
+
+# Secrets: keep .env out of the image; .env.example is fine to include.
+.env
+.env.local
+.env.*.local
+
+# Editor / OS cruft
+.DS_Store
+.vscode
+.idea
