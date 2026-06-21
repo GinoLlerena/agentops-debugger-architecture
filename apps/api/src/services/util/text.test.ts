@@ -31,6 +31,16 @@ describe('parseLocaleNumber', () => {
     expect(parseLocaleNumber('320')).toBe(320);
     expect(parseLocaleNumber('12.5')).toBe(12.5);
   });
+  it('treats dots as thousands separators when not decimal-shaped (es-PE)', () => {
+    expect(parseLocaleNumber('1.584.000')).toBe(1_584_000); // multiple dot groups
+    expect(parseLocaleNumber('S/ 1.584.000')).toBe(1_584_000);
+    expect(parseLocaleNumber('1.500')).toBe(1_500); // single 3-digit group → thousands, not 1.5
+    expect(parseLocaleNumber('-1.500')).toBe(-1_500);
+  });
+  it('keeps both-separator and decimal-dot parsing intact', () => {
+    expect(parseLocaleNumber('1.584,50')).toBe(1_584.5);
+    expect(parseLocaleNumber('1584.50')).toBe(1_584.5);
+  });
   it('returns undefined for non-numeric input', () => {
     expect(parseLocaleNumber('N/A')).toBeUndefined();
     expect(parseLocaleNumber('-')).toBeUndefined();

@@ -54,6 +54,27 @@ See [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md) for the full ph
 ### RAG path
 Retrieval is **hybrid**: a BM25 lexical index always runs; when `QWEN_EMBEDDING_MODEL` is configured it is blended with Qwen Cloud vector similarity. With no embeddings model in credits, the **lexical path is the offline-capable default** (decision D4). All service tests run with **no network and no API keys** — external clients (Qwen, Junar, Tablestore, OSS) sit behind interfaces with in-memory/fixture-backed implementations.
 
+## API surface (implemented)
+
+What the server registers today (`apps/api/src/http/server.ts`). Other endpoints
+in `docs/IMPLEMENTATION_PLAN.md` / `docs/files/agentops-debugger-architecture.md`
+(`/documents/*`, `/rag/index`, sessions `POST`/`PATCH`/`/messages`,
+`/reports/search`, `/agent/search-reports`) are **planned**, not yet implemented.
+
+| Method | Route | Purpose |
+| --- | --- | --- |
+| GET | `/health` | mode (`live`/`offline`) |
+| POST | `/agent/ask`, `/agent/ask/resume` | Flow B turn + HITL resume (SSE) |
+| POST | `/agent/oefa-report`, `/agent/oefa-report/resume` | Flow A turn + resume (SSE) |
+| GET | `/trace/:sessionId` | execution ledger |
+| GET | `/oefa/datasets`, `/oefa/datasets/:id`, `/oefa/search`, `/oefa/company/:name` | OEFA data |
+| POST | `/rag/retrieve` | grounding passages |
+| GET | `/reports`, `/reports/:id`, `/reports/:id/export/:fmt` | reports + export (pdf/docx/xlsx) |
+| GET | `/sessions`, `/sessions/:id`, `/sessions/:id/snapshot` | session list / detail / rehydrate |
+
+> No auth layer today — fine for offline/local and the proof-based hackathon
+> deploy; add a middleware before exposing a persistent public URL.
+
 ## Stack
 
 - **Frontend** (`apps/web`): React + Vite + TanStack Router/Query + Tailwind + **Recharts**. A typed SSE client folds the streaming event envelope into chat state (custom client rather than CopilotKit, since `/agent/*` speaks our own typed contract); the agent drives the canvas (tabs + charts) through typed `uiActions`.

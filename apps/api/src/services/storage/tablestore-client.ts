@@ -7,9 +7,9 @@ import type { DocumentStore, StoredDoc } from './ports.js';
  * Alibaba-usage proof file. All collections share one wide-column table with a
  * composite primary key `(pk = collection, id)` and a JSON `value` attribute.
  *
- * Not exercised by unit tests (needs live credentials); covered by gated
- * integration tests and verified to compile. Use {@link InMemoryDocumentStore}
- * offline.
+ * Not exercised by unit tests (needs live credentials); verified to compile and
+ * intended to be checked via an env-gated smoke test before deploy. Use
+ * {@link InMemoryDocumentStore} offline.
  */
 export class TablestoreDocumentStore implements DocumentStore {
   private readonly client: InstanceType<typeof TableStore.Client>;
