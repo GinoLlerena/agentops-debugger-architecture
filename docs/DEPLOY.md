@@ -256,7 +256,33 @@ Checklist:
 
 ---
 
-## 9. Security
+## 9. Cost-safe runbook (deploy → prove → stop)
+
+The hackathon requires **proof** of Alibaba Cloud deployment, **not** a 24/7 live
+URL: the rules accept *"a link to a website, functioning demo, **or a test
+build**,"* and judges *"are not required to test"* (see [`SUBMISSION.md`](./SUBMISSION.md)).
+So you do **not** need to keep compute running. Recommended flow:
+
+1. [ ] **Before anything**, set a **Budget + spending alert** (e.g. $20) in the
+       Alibaba Cloud console — the single best safety net.
+2. [ ] Develop entirely in **offline mode** (zero LLM cost; the app runs with no
+       keys). Keep `QWEN_MODEL=qwen-plus` — never `qwen-max` for bulk testing.
+3. [ ] Build + push the image (§6), start the ECS instance / FC function, set the
+       env from §1–4.
+4. [ ] Run the smoke test (§7) **and** the proof recording (§8) in a single
+       session — live `/agent/ask`, `/trace`, a report export to OSS, plus the
+       Tablestore/OSS consoles.
+5. [ ] **Stop or release the instance** the moment proof is captured. With the
+       container image, redeploy takes minutes if a judge ever asks.
+
+> If you instead publish a **persistent live URL** as your demo, the rules ask it
+> to stay reachable until the **Judging Period ends (Jul 31, 2026)** — budget
+> compute for that whole window. Submitting the **test build (Docker image) +
+> video** avoids that entirely. Worst-case costs are in `SUBMISSION.md`.
+
+---
+
+## 10. Security
 
 - [ ] Real keys live only in the compute env / secrets manager — **never** in
       git. `.env.example` ships placeholders only; `.env` is gitignored.
