@@ -274,6 +274,10 @@ export class OefaService {
   ): Promise<CompanyProfileResult> {
     const base = await this.getRecords(datasetKey);
     const q = query.trim();
+    // A blank/whitespace query has no entity to resolve. Short-circuit so it
+    // doesn't fall through `applyFilter` (which ignores a falsy `administrado`)
+    // and match every record, returning all entities as ambiguous.
+    if (!q) return { status: 'not_found', query: q };
     const matches = RUC_RE.test(q)
       ? base.records.filter((r) => r.ruc === q)
       : applyFilter(base.records, { administrado: q });

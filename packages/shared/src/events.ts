@@ -8,7 +8,9 @@ import { ClarificationRequest, DomainTaskPacket } from './tasks.js';
  * Never carries secrets.
  */
 export const NormalizedUserRequest = z.object({
-  text: z.string(),
+  // Trimmed and non-empty: a blank query has no intent to plan and (untrimmed)
+  // degrades entity resolution into matching every administrado.
+  text: z.string().trim().min(1, 'La consulta no puede estar vacía.'),
   sessionId: Id.optional(), // omitted → new session
   // Presentation language for the response (search, narrative, citations).
   // Defaults to Spanish (the canonical source language) when omitted.

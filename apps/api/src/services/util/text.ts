@@ -30,7 +30,8 @@ export function canonKey(s: string): string {
  * Rules:
  * - both separators present → the last-occurring one is the decimal separator;
  * - only `,` present → decimal iff a single group of 1–2 trailing digits, else thousands;
- * - only `.` present → treated as the decimal point.
+ * - only `.` present → decimal iff a single group of 1–2 trailing digits, else thousands
+ *   (so `1.584.000` → 1584000 and `1.500` → 1500, symmetric with the comma rule).
  */
 export function parseLocaleNumber(raw: string): number | undefined {
   const cleaned = raw.replace(/[^\d.,-]/g, '');
@@ -50,8 +51,14 @@ export function parseLocaleNumber(raw: string): number | undefined {
       parts.length === 2 && parts[1]!.length > 0 && parts[1]!.length <= 2
         ? parts.join('.') // decimal comma, e.g. "12,5" → 12.5
         : parts.join(''); // thousands commas, e.g. "1,584,000" → 1584000
+  } else if (hasDot) {
+    const parts = cleaned.split('.');
+    normalized =
+      parts.length === 2 && parts[1]!.length > 0 && parts[1]!.length <= 2
+        ? parts.join('.') // decimal dot, e.g. "12.5" → 12.5
+        : parts.join(''); // thousands dots, e.g. "1.584.000" → 1584000, "1.500" → 1500
   } else {
-    normalized = cleaned; // dot-only or plain
+    normalized = cleaned; // plain integer
   }
 
   const n = Number(normalized);

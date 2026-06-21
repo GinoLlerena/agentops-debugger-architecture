@@ -81,8 +81,15 @@ export function useAgentStream(sessionId: string) {
   const send = useCallback(
     async (text: string) => {
       if (busyRef.current || !text.trim()) return;
+      // A new user turn starts with a fresh canvas. The `plan` event resets these
+      // too, but a planner `reply` answers with no `plan`, so clear here so a
+      // follow-up question never shows the previous turn's charts/evidence/report.
       setState((prev) => ({
         ...prev,
+        evidence: [],
+        charts: [],
+        requestedTab: undefined,
+        reportId: undefined,
         messages: [...prev.messages, { id: `u${++userSeq}`, kind: 'user', text }],
       }));
       await run('/agent/ask', { text, sessionId, language });
