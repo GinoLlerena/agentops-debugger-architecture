@@ -161,6 +161,11 @@ describe('edge hardening', () => {
     expect(res.headers.get('x-powered-by')).toBeNull();
   });
 
+  it('sets an X-Request-Id correlation header on responses', async () => {
+    const res = await app.request('/health');
+    expect(res.headers.get('x-request-id')).toBeTruthy();
+  });
+
   it('rejects an oversized request body with 413 (before parsing)', async () => {
     const res = await ask({ text: 'a'.repeat(40_000), sessionId: 'too-big' });
     expect(res.status).toBe(413);

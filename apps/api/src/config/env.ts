@@ -17,6 +17,9 @@ import { z } from 'zod';
 export const EnvSchema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   PORT: z.coerce.number().int().positive().default(8787),
+  /** pino log level. Defaults by environment when unset (info in production,
+   *  debug otherwise); `silent` disables logging (used by the test suite). */
+  LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).optional(),
   /** Directory of the built web SPA to serve same-origin (cwd-relative or
    *  absolute). When present, the API also serves the front-end so a single
    *  origin/container hosts both. Empty/absent → API-only (dev uses Vite). */

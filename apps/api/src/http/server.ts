@@ -7,6 +7,7 @@ import {
 } from '@agentops/shared';
 import { Hono, type Context, type MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
+import { requestId } from 'hono/request-id';
 import { secureHeaders } from 'hono/secure-headers';
 import { streamSSE } from 'hono/streaming';
 import { z, ZodError } from 'zod';
@@ -16,7 +17,13 @@ import { OEFA_DATASETS } from '../services/oefa/datasets.js';
 import { RecordFilterSchema } from '../services/oefa/oefa-service.js';
 import { buildSessionSnapshot } from '../orchestration/coordinator/snapshot.js';
 import type { OnProgress } from '../orchestration/coordinator/types.js';
+import { httpLogger, type ObsVariables } from '../observability/http-logger.js';
+import { logger } from '../observability/logger.js';
 import type { AppDeps } from './deps.js';
+
+/** Hono environment carrying the per-request correlation id + child logger. */
+type AppEnv = { Variables: ObsVariables };
+export type AppServer = Hono<AppEnv>;
 
 /** Query-string year params arrive as strings; treat present-but-empty as absent. */
 const QueryYear = z.preprocess(
@@ -33,8 +40,13 @@ const OefaSearchSchema = RecordFilterSchema.extend({ yearFrom: QueryYear, yearTo
  * endpoints emit the typed event envelope (architecture §10), always terminating
  * with a typed `done` frame; REST serves the canvas/dashboard and `/trace`.
  */
-export function createServer(deps: AppDeps): Hono {
-  const app = new Hono();
+export function createServer(deps: AppDeps): AppServer {
+  const app = new Hono<AppEnv>();
+
+  // Correlation + access logging first, so every later handler (and onError) has a
+  // request-scoped child logger and the X-Request-Id is set on the response.
+  app.use('*', requestId());
+  app.use('*', httpLogger());
 
   // Baseline security headers on every response (incl. the same-origin SPA mounted
   // later in index.ts). Defaults only — no Content-Security-Policy is set, so the
@@ -44,9 +56,9 @@ export function createServer(deps: AppDeps): Hono {
   app.onError((err, c) => {
     if (err instanceof ZodError) return c.json({ error: 'Solicitud inválida', issues: err.issues }, 400);
     // Never leak internal error detail (stack traces, driver/DB text) to the
-    // client: log it server-side and return a generic message. Structured logging
-    // replaces console.error in hardening item 4.
-    console.error('[api] unhandled error', err);
+    // client: log it server-side (correlated by requestId) and return a generic
+    // message.
+    (c.get('log') ?? logger).error({ err }, 'unhandled error');
     return c.json({ error: 'Error interno' }, 500);
   });
 
@@ -68,7 +80,7 @@ export function createServer(deps: AppDeps): Hono {
    * still completes and persists, and any coordinator/persistence error is
    * surfaced as a typed `error` event. Every stream ends with a typed `done`.
    */
-  const runAgent = (kind: 'start' | 'resume') => async (c: Context) => {
+  const runAgent = (kind: 'start' | 'resume') => async (c: Context<AppEnv>) => {
     if (kind === 'start') {
       const request = NormalizedUserRequest.parse(await c.req.json());
       if (request.sessionId) {
@@ -191,10 +203,11 @@ export function createServer(deps: AppDeps): Hono {
 
 /** Shared SSE driver: stream progress events, persist, and always end with `done`. */
 function streamTurn(
-  c: Context,
+  c: Context<AppEnv>,
   deps: AppDeps,
   run: (onProgress: OnProgress) => Promise<OrchestratorState>,
 ) {
+  const log = c.get('log') ?? logger;
   return streamSSE(c, async (stream) => {
     const send = async (event: StreamEvent) => {
       // Swallow write errors: a disconnected client must not abort the run, so
@@ -212,7 +225,7 @@ function streamTurn(
     } catch (err) {
       // Sanitize the same way as app.onError: the real error is logged server-side,
       // the SSE `error` frame carries only a stable code + generic message.
-      console.error('[api] orchestrator error', err);
+      log.error({ err }, 'orchestrator error');
       await send({
         type: 'error',
         payload: { code: 'orchestrator_error', message: 'Error interno del orquestador.' },
@@ -225,7 +238,7 @@ function streamTurn(
       try {
         await deps.sessionStore.saveState(next);
       } catch (err) {
-        console.error('[api] persist error', err);
+        log.error({ err }, 'persist error');
         status = 'failed';
         sessionId = next.sessionId;
         await send({

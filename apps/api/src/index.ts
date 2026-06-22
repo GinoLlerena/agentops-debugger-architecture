@@ -7,10 +7,10 @@ import 'dotenv/config';
 import { existsSync } from 'node:fs';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
-import type { Hono } from 'hono';
 import { getEnv, type Env } from './config/env.js';
 import { buildDeps } from './http/deps.js';
-import { createServer } from './http/server.js';
+import { createServer, type AppServer } from './http/server.js';
+import { logger } from './observability/logger.js';
 
 export { createServer } from './http/server.js';
 export { buildDeps, type AppDeps } from './http/deps.js';
@@ -22,7 +22,7 @@ export { buildDeps, type AppDeps } from './http/deps.js';
  * what the API didn't — keeping a single origin/container for front-end + back-end
  * (no CORS, no separate API base URL). A no-op in dev, where Vite serves the SPA.
  */
-function mountWebApp(app: Hono, env: Env): boolean {
+function mountWebApp(app: AppServer, env: Env): boolean {
   const dir = env.WEB_DIST_DIR;
   if (!dir || !existsSync(dir)) return false;
   // Hashed build assets (immutable) and the favicon are read straight from disk.
@@ -40,16 +40,16 @@ async function main(): Promise<void> {
   const app = createServer(deps);
   const web = mountWebApp(app, env);
   serve({ fetch: app.fetch, port: env.PORT }, (info) => {
-    const ui = web ? ` · app web en /` : ' · solo API';
-    console.log(
-      `AgentOps Debugger API · modo ${deps.mode}${ui} · escuchando en http://localhost:${info.port}`,
+    logger.info(
+      { mode: deps.mode, web, port: info.port },
+      `AgentOps Debugger API escuchando en http://localhost:${info.port}`,
     );
   });
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   main().catch((err) => {
-    console.error('Fallo al iniciar el servidor:', err);
+    logger.fatal({ err }, 'Fallo al iniciar el servidor');
     process.exit(1);
   });
 }
