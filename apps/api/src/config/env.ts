@@ -22,6 +22,20 @@ export const EnvSchema = z.object({
    *  origin/container hosts both. Empty/absent → API-only (dev uses Vite). */
   WEB_DIST_DIR: z.string().min(1).default('apps/web/dist'),
 
+  // --- Edge hardening (expensive endpoints) ---
+  /** Token-bucket rate limit in requests/minute/IP on the agent + RAG endpoints.
+   *  `0` disables it — the default, so offline runs and the test suite stay
+   *  frictionless. Set a positive value (e.g. 60) on a public deploy. */
+  RATE_LIMIT_PER_MIN: z.coerce.number().int().nonnegative().default(0),
+  /** Max request-body size (bytes) accepted on those POST endpoints. Generous for
+   *  a question/answer payload while capping abuse; on by default. */
+  BODY_LIMIT_BYTES: z.coerce.number().int().positive().default(32_768),
+  /** Optional shared secret gating the deployed demo. When set, API routes require
+   *  a matching `demo_token` cookie (obtained via `/unlock?token=…`); /health,
+   *  static assets and the SPA stay open. Unset (default) → no gate, so offline
+   *  and dev are unaffected. */
+  DEMO_ACCESS_TOKEN: z.string().min(1).optional(),
+
   // --- Qwen Cloud / DashScope (OpenAI-compatible) ---
   DASHSCOPE_API_KEY: z.string().min(1).optional(),
   DASHSCOPE_BASE_URL: z

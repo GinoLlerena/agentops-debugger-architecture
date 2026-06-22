@@ -50,8 +50,10 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
   const maxTaskSteps = deps.maxTaskSteps ?? DEFAULT_MAX_TASK_STEPS;
   const translator = deps.translator ?? new NoopTranslator();
   const clock = deps.clock ?? (() => new Date());
-  let counter = 0;
-  const idgen = deps.idgen ?? (() => `id-${++counter}`);
+  // Default to unguessable UUIDs: a server-minted sessionId is the access boundary
+  // until real auth lands, so it must not be enumerable. Tests inject a
+  // deterministic idgen via deps.
+  const idgen = deps.idgen ?? (() => crypto.randomUUID());
 
   // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -244,26 +246,26 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
       }
 
       // apply (may suspend on clarification)
-      const suspended = applyResult(state, task, result, onProgress);
+      const suspended = await applyResult(state, task, result, onProgress);
       if (suspended) return state;
     }
     return finalize(state, onProgress);
   }
 
   /** Returns true if the run suspended (clarification) and the caller must stop. */
-  function applyResult(
+  async function applyResult(
     state: OrchestratorState,
     task: DomainTaskPacket,
     result: DomainTaskResult,
     onProgress: OnProgress,
-  ): boolean {
+  ): Promise<boolean> {
     // agent needs user input (e.g. ambiguous entity) → suspend, keep task at head
     if (result.status === 'needs_user_input' && result.clarification) {
       state.executionStatus = 'waiting';
       state.interruptState = { interruptId: idgen(), reason: 'clarification', taskId: task.taskId };
       state.pendingClarification = result.clarification; // persist for rehydration
       ledger(state, 'clarification_required', {}, { taskId: task.taskId, agentId: result.agentId });
-      void emit(onProgress, { type: 'clarification_required', payload: result.clarification });
+      await emit(onProgress, { type: 'clarification_required', payload: result.clarification });
       return true;
     }
 
@@ -314,7 +316,7 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
       { status: result.status, summary: result.summary },
       { taskId: task.taskId, agentId: result.agentId },
     );
-    void emit(onProgress, {
+    await emit(onProgress, {
       type: 'task_done',
       payload: { taskId: task.taskId, status: streamStatus, result: result.summary },
     });
@@ -367,7 +369,7 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
         ? [{ action: 'open_tab', tab: 'datos' }]
         : [];
 
-    void emit(onProgress, {
+    await emit(onProgress, {
       type: 'result',
       payload: {
         text,

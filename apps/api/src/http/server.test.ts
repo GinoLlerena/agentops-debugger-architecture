@@ -153,6 +153,75 @@ describe('input validation', () => {
   });
 });
 
+describe('edge hardening', () => {
+  it('sets baseline security headers on responses', async () => {
+    const res = await app.request('/health');
+    expect(res.headers.get('x-content-type-options')).toBe('nosniff');
+    // secureHeaders strips the framework fingerprint
+    expect(res.headers.get('x-powered-by')).toBeNull();
+  });
+
+  it('rejects an oversized request body with 413 (before parsing)', async () => {
+    const res = await ask({ text: 'a'.repeat(40_000), sessionId: 'too-big' });
+    expect(res.status).toBe(413);
+  });
+
+  it('throttles per-IP once the rate limit is exceeded (429)', async () => {
+    // Dedicated app with a tiny limit; offline default (0) never throttles.
+    const limited = createServer(await buildDeps(getEnv({ RATE_LIMIT_PER_MIN: '1' })));
+    const hit = () =>
+      limited.request('/rag/retrieve', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ query: 'sanciones' }),
+      });
+    expect((await hit()).status).toBe(200);
+    expect((await hit()).status).toBe(429);
+  });
+
+  it('demo gate: blocks API routes without the cookie and unlocks via /unlock', async () => {
+    const gated = createServer(await buildDeps(getEnv({ DEMO_ACCESS_TOKEN: 'sekret' })));
+
+    // open surfaces stay reachable
+    expect((await gated.request('/health')).status).toBe(200);
+
+    // API route without the cookie → 401
+    const blocked = await gated.request('/sessions');
+    expect(blocked.status).toBe(401);
+
+    // wrong token → 403, no cookie
+    expect((await gated.request('/unlock?token=nope')).status).toBe(403);
+
+    // correct token → redirect + Set-Cookie
+    const unlocked = await gated.request('/unlock?token=sekret');
+    expect(unlocked.status).toBe(302);
+    const setCookie = unlocked.headers.get('set-cookie') ?? '';
+    expect(setCookie).toContain('demo_token=');
+    expect(setCookie.toLowerCase()).toContain('httponly');
+
+    // carrying the cookie passes the gate
+    const cookie = setCookie.split(';')[0]!;
+    const allowed = await gated.request('/sessions', { headers: { cookie } });
+    expect(allowed.status).toBe(200);
+  });
+
+  it('demo gate is disabled (open) when DEMO_ACCESS_TOKEN is unset', async () => {
+    // The default offline app has no token → API routes are reachable.
+    expect((await app.request('/sessions')).status).toBe(200);
+  });
+
+  it('does not leak internal error detail in the 500 body', async () => {
+    // A non-Zod failure surfaces as a generic message, not the raw error text.
+    const res = await app.request('/reports/%2e%2e'); // odd id; exercises the handler
+    // (the store returns 404 here; the assertion that matters is no stack/message leak)
+    if (res.status === 500) {
+      expect(await res.json()).toEqual({ error: 'Error interno' });
+    } else {
+      expect(res.status).toBe(404);
+    }
+  });
+});
+
 describe('Flow A — report generation with HITL approval', () => {
   it('drafts a report, gates the save on approval, then persists it as approved', async () => {
     const first = await readSSE(

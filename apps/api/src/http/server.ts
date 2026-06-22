@@ -5,9 +5,13 @@ import {
   type OrchestratorState,
   type StreamEvent,
 } from '@agentops/shared';
-import { Hono, type Context } from 'hono';
+import { Hono, type Context, type MiddlewareHandler } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
+import { secureHeaders } from 'hono/secure-headers';
 import { streamSSE } from 'hono/streaming';
 import { z, ZodError } from 'zod';
+import { demoGate, unlockHandler } from './demo-gate.js';
+import { rateLimit } from './rate-limit.js';
 import { OEFA_DATASETS } from '../services/oefa/datasets.js';
 import { RecordFilterSchema } from '../services/oefa/oefa-service.js';
 import { buildSessionSnapshot } from '../orchestration/coordinator/snapshot.js';
@@ -32,10 +36,28 @@ const OefaSearchSchema = RecordFilterSchema.extend({ yearFrom: QueryYear, yearTo
 export function createServer(deps: AppDeps): Hono {
   const app = new Hono();
 
+  // Baseline security headers on every response (incl. the same-origin SPA mounted
+  // later in index.ts). Defaults only — no Content-Security-Policy is set, so the
+  // Vite-built SPA's inline/asset loads are unaffected.
+  app.use('*', secureHeaders());
+
   app.onError((err, c) => {
     if (err instanceof ZodError) return c.json({ error: 'Solicitud inválida', issues: err.issues }, 400);
-    return c.json({ error: err instanceof Error ? err.message : 'Error interno' }, 500);
+    // Never leak internal error detail (stack traces, driver/DB text) to the
+    // client: log it server-side and return a generic message. Structured logging
+    // replaces console.error in hardening item 4.
+    console.error('[api] unhandled error', err);
+    return c.json({ error: 'Error interno' }, 500);
   });
+
+  // Optional demo-access gate (disabled unless DEMO_ACCESS_TOKEN is set). Scoped to
+  // the API prefixes only — /health, /unlock, static assets and the SPA fallback
+  // stay open so the unlock link loads and health checks keep working.
+  const gate = demoGate(deps.env.DEMO_ACCESS_TOKEN);
+  for (const prefix of ['/agent/*', '/sessions/*', '/trace/*', '/reports/*', '/rag/*', '/oefa/*']) {
+    app.use(prefix, gate);
+  }
+  app.get('/unlock', unlockHandler(deps.env.DEMO_ACCESS_TOKEN));
 
   app.get('/health', (c) => c.json({ status: 'ok', mode: deps.mode }));
 
@@ -78,10 +100,21 @@ export function createServer(deps: AppDeps): Hono {
     );
   };
 
-  app.post('/agent/ask', runAgent('start'));
-  app.post('/agent/ask/resume', runAgent('resume'));
-  app.post('/agent/oefa-report', runAgent('start'));
-  app.post('/agent/oefa-report/resume', runAgent('resume'));
+  // Edge guards for the expensive endpoints: cap the request body, then apply the
+  // per-IP token-bucket rate limit (disabled when RATE_LIMIT_PER_MIN is 0). Cheap
+  // GET reads are intentionally left ungated.
+  const guard: [MiddlewareHandler, MiddlewareHandler] = [
+    bodyLimit({
+      maxSize: deps.env.BODY_LIMIT_BYTES,
+      onError: (c) => c.json({ error: 'La solicitud es demasiado grande.' }, 413),
+    }),
+    rateLimit(deps.env.RATE_LIMIT_PER_MIN),
+  ];
+
+  app.post('/agent/ask', ...guard, runAgent('start'));
+  app.post('/agent/ask/resume', ...guard, runAgent('resume'));
+  app.post('/agent/oefa-report', ...guard, runAgent('start'));
+  app.post('/agent/oefa-report/resume', ...guard, runAgent('resume'));
 
   // ── trace (AgentOps debugger feed) ────────────────────────────────────────
   app.get('/trace/:sessionId', async (c) => {
@@ -106,7 +139,7 @@ export function createServer(deps: AppDeps): Hono {
   });
 
   // ── RAG ─────────────────────────────────────────────────────────────────
-  app.post('/rag/retrieve', async (c) => {
+  app.post('/rag/retrieve', ...guard, async (c) => {
     const body = z
       .object({ query: z.string().min(1), limit: z.number().int().positive().max(20).optional() })
       .parse(await c.req.json());
@@ -177,9 +210,12 @@ function streamTurn(
     try {
       next = await run(send);
     } catch (err) {
+      // Sanitize the same way as app.onError: the real error is logged server-side,
+      // the SSE `error` frame carries only a stable code + generic message.
+      console.error('[api] orchestrator error', err);
       await send({
         type: 'error',
-        payload: { code: 'orchestrator_error', message: err instanceof Error ? err.message : String(err) },
+        payload: { code: 'orchestrator_error', message: 'Error interno del orquestador.' },
       });
     }
 
@@ -189,11 +225,12 @@ function streamTurn(
       try {
         await deps.sessionStore.saveState(next);
       } catch (err) {
+        console.error('[api] persist error', err);
         status = 'failed';
         sessionId = next.sessionId;
         await send({
           type: 'error',
-          payload: { code: 'persist_error', message: err instanceof Error ? err.message : String(err) },
+          payload: { code: 'persist_error', message: 'No se pudo guardar la sesión.' },
         });
       }
     }
