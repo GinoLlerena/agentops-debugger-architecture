@@ -64,7 +64,7 @@ export function rateLimit(perMinute: number): MiddlewareHandler {
  * key when connection info is unavailable (e.g. `app.request()` in tests) — fine
  * because limiting is disabled by default there.
  */
-function clientIp(c: Context): string {
+export function clientIp(c: Context): string {
   const fwd = c.req.header('x-forwarded-for');
   if (fwd) return fwd.split(',')[0]!.trim();
   try {

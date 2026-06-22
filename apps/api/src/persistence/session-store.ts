@@ -1,13 +1,14 @@
 import {
+  OrchestratorState,
   Report,
   type LedgerEvent,
   type OefaRecord,
-  type OrchestratorState,
   type ResultSummary,
   type Session,
   type SubjectEntity,
 } from '@agentops/shared';
 import { COLLECTIONS, type DocumentStore } from '../services/storage/index.js';
+import { logger } from '../observability/logger.js';
 
 /**
  * Persistence for orchestrator runs (architecture §11.2). The full
@@ -27,7 +28,20 @@ export class SessionStore {
   }
 
   async loadState(sessionId: string): Promise<OrchestratorState | undefined> {
-    return this.docs.get<OrchestratorState>(COLLECTIONS.snapshots, sessionId);
+    // Validate at the read boundary: a stale/older-version/hand-edited row must
+    // not crash resume, snapshot or report generation. On failure, log (no secret
+    // values in a state) and treat the session as absent rather than throw.
+    const raw = await this.docs.get<unknown>(COLLECTIONS.snapshots, sessionId);
+    if (raw == null) return undefined;
+    const parsed = OrchestratorState.safeParse(raw);
+    if (!parsed.success) {
+      logger.warn(
+        { sessionId, issues: parsed.error.issues },
+        'discarding malformed persisted orchestrator state',
+      );
+      return undefined;
+    }
+    return parsed.data;
   }
 
   async getSession(sessionId: string): Promise<Session | undefined> {

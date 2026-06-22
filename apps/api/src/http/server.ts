@@ -12,7 +12,8 @@ import { secureHeaders } from 'hono/secure-headers';
 import { streamSSE } from 'hono/streaming';
 import { z, ZodError } from 'zod';
 import { demoGate, unlockHandler } from './demo-gate.js';
-import { rateLimit } from './rate-limit.js';
+import { deepHealth } from './health.js';
+import { clientIp, rateLimit } from './rate-limit.js';
 import { OEFA_DATASETS } from '../services/oefa/datasets.js';
 import { RecordFilterSchema } from '../services/oefa/oefa-service.js';
 import { buildSessionSnapshot } from '../orchestration/coordinator/snapshot.js';
@@ -72,6 +73,12 @@ export function createServer(deps: AppDeps): AppServer {
   app.get('/unlock', unlockHandler(deps.env.DEMO_ACCESS_TOKEN));
 
   app.get('/health', (c) => c.json({ status: 'ok', mode: deps.mode }));
+  // Deep health: actively pings each configured integration (manual/deploy
+  // verification + observability). Left open like /health. The Qwen probe is
+  // config-only unless `?llm=1`, so polling can't burn model credits.
+  app.get('/health/deep', async (c) =>
+    c.json(await deepHealth(deps, { llm: c.req.query('llm') === '1' })),
+  );
 
   /**
    * Run a coordinator turn and stream it. Validation/precondition failures return
@@ -81,6 +88,10 @@ export function createServer(deps: AppDeps): AppServer {
    * surfaced as a typed `error` event. Every stream ends with a typed `done`.
    */
   const runAgent = (kind: 'start' | 'resume') => async (c: Context<AppEnv>) => {
+    // Capture the originator at the boundary (the coordinator is framework-agnostic
+    // and can't read the request). Only `ip` until auth lands; stamped on every
+    // ledger event of the run.
+    const actor = { ip: clientIp(c) };
     if (kind === 'start') {
       const request = NormalizedUserRequest.parse(await c.req.json());
       if (request.sessionId) {
@@ -92,7 +103,9 @@ export function createServer(deps: AppDeps): AppServer {
           );
         }
       }
-      return streamTurn(c, deps, (onProgress) => deps.coordinator.start(request, { onProgress }));
+      return streamTurn(c, deps, (onProgress) =>
+        deps.coordinator.start(request, { onProgress, actor }),
+      );
     }
 
     const body = z
@@ -108,7 +121,7 @@ export function createServer(deps: AppDeps): AppServer {
       );
     }
     return streamTurn(c, deps, (onProgress) =>
-      deps.coordinator.resume(state, body.resumption, { onProgress }),
+      deps.coordinator.resume(state, body.resumption, { onProgress, actor }),
     );
   };
 

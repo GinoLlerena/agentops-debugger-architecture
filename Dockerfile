@@ -30,8 +30,12 @@ ENV NODE_ENV=production \
 WORKDIR /app
 
 # Copy the fully built workspace. pnpm's symlinked node_modules (incl. the
-# .pnpm store) stay valid because the whole tree is copied together.
-COPY --from=build /app ./
+# .pnpm store) stay valid because the whole tree is copied together. Owned by the
+# non-root `node` user (present in the base image) so the container runs unprivileged.
+COPY --from=build --chown=node:node /app ./
+
+# Drop root: the server only needs to read the built tree and bind $PORT (>1024).
+USER node
 
 EXPOSE 8787
 # Liveness: the API reports its mode at /health.

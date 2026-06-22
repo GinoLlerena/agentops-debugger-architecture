@@ -175,6 +175,32 @@ describe('edge hardening', () => {
     expect(res.headers.get('x-request-id')).toBeTruthy();
   });
 
+  it('GET /health/deep is ok with all integrations skipped offline', async () => {
+    const res = await app.request('/health/deep');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      status: string;
+      mode: string;
+      services: Record<string, { status: string }>;
+    };
+    expect(body.status).toBe('ok');
+    expect(body.mode).toBe('offline');
+    expect(body.services.tablestore.status).toBe('skipped');
+    expect(body.services.oss.status).toBe('skipped');
+    expect(body.services.qwen.status).toBe('skipped');
+    expect(body.services.oefa.status).toBe('skipped');
+  });
+
+  it('stamps an actor (ip) on every ledger event', async () => {
+    await readSSE(
+      await ask({ text: 'Antecedentes del administrado con RUC 20543210981', sessionId: 'actor-1' }),
+    );
+    const res = await app.request('/trace/actor-1');
+    const body = (await res.json()) as { events: Array<{ actor?: { ip?: string } }> };
+    expect(body.events.length).toBeGreaterThan(0);
+    expect(body.events.every((e) => Boolean(e.actor?.ip))).toBe(true);
+  });
+
   it('rejects an oversized request body with 413 (before parsing)', async () => {
     const res = await ask({ text: 'a'.repeat(40_000), sessionId: 'too-big' });
     expect(res.status).toBe(413);

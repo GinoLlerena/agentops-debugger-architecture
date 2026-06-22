@@ -26,13 +26,13 @@ confidence and operability. Do P0 first; each item is independently shippable.
 | 3 | Tenancy | Full-UUID sessionId + demo-token middleware | P0 | S | ✅ done |
 | 4 | Observability | pino + correlation ID + redaction + HTTP logging | P0 | M | ✅ done |
 | 5 | Observability | Emit `tool_called` + capture LLM usage into ledger | P0 | M/L | ✅ done |
-| 6 | Observability | Add nullable `actor` to LedgerEvent (attribution-ready) | P1 | S | ⬜ todo |
-| 7 | Smoke tests | Deep-health endpoint (`/health/deep`) | P1 | S | ⬜ todo |
-| 8 | Smoke tests | Env-gated `pnpm test:integration` suite | P1 | M | ⬜ todo |
-| 9 | Config | Boot-time config report (redacted) | P1 | S | ⬜ todo |
-| 10 | CI/CD | Lint in CI + non-root container + branch protection | P1 | S | ⬜ todo |
+| 6 | Observability | Add nullable `actor` to LedgerEvent (attribution-ready) | P1 | S | ✅ done |
+| 7 | Smoke tests | Deep-health endpoint (`/health/deep`) | P1 | S | ✅ done |
+| 8 | Smoke tests | Env-gated `pnpm test:integration` suite | P1 | M | ✅ done |
+| 9 | Config | Boot-time config report (redacted) | P1 | S | ✅ done |
+| 10 | CI/CD | Lint in CI + non-root container + branch protection | P1 | S | ◑ code done; branch protection = repo setting |
 | 11 | Streaming | Await coordinator SSE emits so `done` can't race `result` | P0 | S | ✅ done |
-| 12 | Validation | `OrchestratorState.safeParse` on persisted load | P1 | S | ⬜ todo |
+| 12 | Validation | `OrchestratorState.safeParse` on persisted load | P1 | S | ✅ done |
 
 > **Implementation status (2026-06-22): all P0 done** — items 1, 2, 3, 4, 5, 11
 > committed on branch `hardening/p0-edge` (3 commits). 188 api + 30 web tests green
@@ -45,6 +45,13 @@ confidence and operability. Do P0 first; each item is independently shippable.
 > covering live (tools→service) and offline (direct service calls); verified offline
 > a Flow B run records 3 `tool_called` with agent attribution, no double-counting.
 > **Remaining = P1 only (items 6–10, 12).**
+>
+> **P1 status (2026-06-22): code complete.** Items 6 (actor + ip capture), 7
+> (`/health/deep`), 8 (env-gated `test:integration` + dedicated vitest config), 9
+> (boot config report), 10 (CI `pnpm lint` + non-root `USER node` container), 12
+> (loadState safeParse) implemented; 192 api tests green (+4), lint/typecheck/build
+> clean. **Only manual step left: enable branch protection on `main` (repo setting,
+> via GitHub UI or `gh api`).** Deferred section unchanged.
 
 Effort: S ≈ <½ day, M ≈ ½–1 day, M/L ≈ ~1 day.
 

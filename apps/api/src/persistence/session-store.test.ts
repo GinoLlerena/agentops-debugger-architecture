@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ArtifactRecord, OrchestratorState } from '@agentops/shared';
 import { InMemoryDocumentStore } from '../services/storage/in-memory-store.js';
+import { COLLECTIONS } from '../services/storage/index.js';
 import { buildReport } from '../services/report/build-report.js';
 import type { CompanyStats } from '../services/oefa/oefa-service.js';
 import { SessionStore } from './session-store.js';
@@ -115,5 +116,23 @@ describe('SessionStore — derives listing metadata from state (Finding 9)', () 
     const session = await store.getSession('s1');
     expect(session?.subjectEntity).toEqual({ name: 'Minera Las Bambas S.A.', ruc: '20543210981' });
     expect(session?.messageCount).toBe(2);
+  });
+});
+
+describe('SessionStore — loadState validates persisted state (item 12)', () => {
+  it('round-trips a valid state', async () => {
+    const store = new SessionStore(new InMemoryDocumentStore());
+    await store.saveState(stateWith({ finalResponseDraft: 'ok' }));
+    const loaded = await store.loadState('s1');
+    expect(loaded?.sessionId).toBe('s1');
+    expect(loaded?.finalResponseDraft).toBe('ok');
+  });
+
+  it('returns undefined for a malformed stored state instead of throwing', async () => {
+    const docs = new InMemoryDocumentStore();
+    // A stale/hand-edited row that is not a valid OrchestratorState.
+    await docs.put(COLLECTIONS.snapshots, 'bad', { sessionId: 123, not: 'a state' });
+    const store = new SessionStore(docs);
+    await expect(store.loadState('bad')).resolves.toBeUndefined();
   });
 });

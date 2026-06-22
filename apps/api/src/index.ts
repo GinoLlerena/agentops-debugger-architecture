@@ -7,7 +7,14 @@ import 'dotenv/config';
 import { existsSync } from 'node:fs';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
-import { getEnv, type Env } from './config/env.js';
+import {
+  getEnv,
+  isOefaConfigured,
+  isOssConfigured,
+  isQwenConfigured,
+  isTablestoreConfigured,
+  type Env,
+} from './config/env.js';
 import { buildDeps } from './http/deps.js';
 import { createServer, type AppServer } from './http/server.js';
 import { logger } from './observability/logger.js';
@@ -37,6 +44,27 @@ function mountWebApp(app: AppServer, env: Env): boolean {
 async function main(): Promise<void> {
   const env = getEnv();
   const deps = await buildDeps(env);
+
+  // Boot-time redacted config report: surface mode + which integrations are wired
+  // (booleans only, never secret values) so misconfiguration is visible at startup
+  // instead of at the first user request.
+  logger.info(
+    {
+      mode: deps.mode,
+      integrations: {
+        qwen: isQwenConfigured(env),
+        oefa: isOefaConfigured(env),
+        tablestore: isTablestoreConfigured(env),
+        oss: isOssConfigured(env),
+      },
+      rateLimitPerMin: env.RATE_LIMIT_PER_MIN,
+      bodyLimitBytes: env.BODY_LIMIT_BYTES,
+      demoGate: Boolean(env.DEMO_ACCESS_TOKEN),
+      logLevel: logger.level,
+    },
+    'configuración cargada',
+  );
+
   const app = createServer(deps);
   const web = mountWebApp(app, env);
   serve({ fetch: app.fetch, port: env.PORT }, (info) => {

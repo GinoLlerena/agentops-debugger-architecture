@@ -25,6 +25,19 @@ export const LedgerEventType = z.enum([
 ]);
 export type LedgerEventType = z.infer<typeof LedgerEventType>;
 
+/**
+ * Who/what originated an action. All fields optional: until authentication lands,
+ * only `ip` (captured at the HTTP boundary) is populated; `id`/`role` are the
+ * non-breaking fill-in once there are authenticated users (the hinge to real
+ * attribution/tenancy). Never carries credentials.
+ */
+export const Actor = z.object({
+  id: z.string().optional(),
+  role: z.string().optional(),
+  ip: z.string().optional(),
+});
+export type Actor = z.infer<typeof Actor>;
+
 export const LedgerEvent = z.object({
   seq: z.number().int().nonnegative(), // ordering within a session
   sessionId: Id,
@@ -33,6 +46,7 @@ export const LedgerEvent = z.object({
   timestamp: IsoTimestamp,
   agentId: z.string().optional(), // attribution
   taskId: z.string().optional(),
+  actor: Actor.optional(), // originator (ip now; id/role once auth lands)
   /**
    * Event-specific payload. For `tool_called`: { tool, params, durationMs,
    * resultSize }. For `llm_call`: { role, model, inputTokens, outputTokens,

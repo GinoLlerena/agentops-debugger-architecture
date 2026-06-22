@@ -1,5 +1,6 @@
 import {
   DEFAULT_LANGUAGE,
+  type Actor,
   type DomainTaskPacket,
   type DomainTaskResult,
   type LedgerEvent,
@@ -31,6 +32,7 @@ import type {
 const DEFAULT_MAX_TASK_STEPS = 12;
 const APPROVED_KEY = 'approvedTaskIds';
 const REQUEST_KEY = 'originalRequest';
+const ACTOR_KEY = 'actor';
 
 const noop: OnProgress = () => {};
 
@@ -64,6 +66,7 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
     payload: Record<string, unknown> = {},
     meta: { agentId?: string; taskId?: string } = {},
   ): void {
+    const actor = state.workspace.sharedFacts[ACTOR_KEY] as Actor | undefined;
     const event: LedgerEvent = {
       seq: state.ledger.length,
       sessionId: state.sessionId,
@@ -72,6 +75,7 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
       timestamp: clock().toISOString(),
       agentId: meta.agentId,
       taskId: meta.taskId,
+      actor,
       payload,
     };
     state.ledger.push(event);
@@ -144,7 +148,7 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
 
   // ── steps ────────────────────────────────────────────────────────────────
 
-  function ingest(request: NormalizedUserRequest): OrchestratorState {
+  function ingest(request: NormalizedUserRequest, actor?: Actor): OrchestratorState {
     const runId = idgen();
     const sessionId = request.sessionId ?? idgen();
     const state: OrchestratorState = {
@@ -160,6 +164,8 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
       artifacts: {},
       ledger: [],
     };
+    // Stamp the originator before the first event so turn_opened carries it too.
+    if (actor) state.workspace.sharedFacts[ACTOR_KEY] = actor;
     ledger(state, 'turn_opened', { text: request.text });
     return state;
   }
@@ -428,7 +434,7 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
     options: RunOptions = {},
   ): Promise<OrchestratorState> {
     const onProgress = options.onProgress ?? noop;
-    const state = ingest(request);
+    const state = ingest(request, options.actor);
     return withRunObserver(makeRunObserver(state), () => doPlan(state, request, onProgress));
   }
 
@@ -438,6 +444,9 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
     options: RunOptions = {},
   ): Promise<OrchestratorState> {
     const onProgress = options.onProgress ?? noop;
+    // Re-stamp with the resuming request's originator so resume-turn events are
+    // attributed to whoever sent the resume (not the original start).
+    if (options.actor) state.workspace.sharedFacts[ACTOR_KEY] = options.actor;
     return withRunObserver(makeRunObserver(state), () => resumeRun(state, resumption, onProgress));
   }
 
