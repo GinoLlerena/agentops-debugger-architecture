@@ -5,6 +5,7 @@ import type { QwenProvider } from '../../services/qwen/qwen-provider.js';
 import { AGENT_IDS, AGENT_MANIFESTS } from '../manifests/registry.js';
 import type { Planner, PlanResult } from '../coordinator/types.js';
 import { COORDINATOR_PROMPT, languageDirective } from './prompts.js';
+import { recordLlmCall } from '../../observability/instrument.js';
 
 const PlanOutputSchema = z.object({
   kind: z.enum(['plan', 'clarification', 'reply']),
@@ -36,8 +37,19 @@ export function createQwenPlanner(qwen: QwenProvider): Planner {
 
   return {
     async plan({ request }): Promise<PlanResult> {
-      const res = await agent.generate(`${languageDirective(request.language)}\n\n${request.text}`, {
-        structuredOutput: { schema: PlanOutputSchema },
+      const start = Date.now();
+      let res;
+      try {
+        res = await agent.generate(`${languageDirective(request.language)}\n\n${request.text}`, {
+          structuredOutput: { schema: PlanOutputSchema },
+        });
+      } catch (err) {
+        recordLlmCall('planner', Date.now() - start, false, { model: qwen.plannerModelId });
+        throw err;
+      }
+      recordLlmCall('planner', Date.now() - start, true, {
+        model: qwen.plannerModelId,
+        usage: (res as { usage?: unknown }).usage,
       });
       const out = res.object as z.infer<typeof PlanOutputSchema>;
       if (out.kind === 'clarification' && out.clarification) {

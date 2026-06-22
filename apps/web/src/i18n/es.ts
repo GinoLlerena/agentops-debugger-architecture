@@ -123,6 +123,7 @@ export const es = {
   'trace.event.task_routed': 'Tarea asignada',
   'trace.event.task_started': 'Tarea iniciada',
   'trace.event.tool_called': 'Herramienta invocada',
+  'trace.event.llm_call': 'Llamada al modelo',
   'trace.event.evidence_attached': 'Evidencia adjuntada',
   'trace.event.guardrail_drop': 'Afirmación descartada (sin evidencia)',
   'trace.event.clarification_required': 'Aclaración solicitada',

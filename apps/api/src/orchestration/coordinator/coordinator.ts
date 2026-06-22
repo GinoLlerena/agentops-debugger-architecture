@@ -16,6 +16,7 @@ import {
 } from '../manifests/registry.js';
 import { applyEvidenceGuardrail, collectKnownEvidenceIds } from './guardrail.js';
 import { collectEvidence, UI_SUPPRESSED_KEY } from './snapshot.js';
+import { withRunObserver, type RunObserver } from '../../observability/run-context.js';
 import { messages } from '../../i18n/messages.js';
 import { localizeEvidence, NoopTranslator } from '../../services/translation/index.js';
 import type {
@@ -79,6 +80,41 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
   const emit = async (onProgress: OnProgress, event: Parameters<OnProgress>[0]) => {
     await onProgress(event);
   };
+
+  /**
+   * Per-run observability sink: tool/service calls and LLM generations (recorded
+   * via AsyncLocalStorage from the instrumentation layer) land in the ledger as
+   * `tool_called` / `llm_call` events, attributed to whichever task is active.
+   * Keeping this on the run state — not a global — means concurrent runs never
+   * cross-contaminate, and the coordinator stays framework-agnostic.
+   */
+  function makeRunObserver(state: OrchestratorState): RunObserver {
+    const meta = () => ({ agentId: state.activeTask?.agentId, taskId: state.activeTask?.taskId });
+    return {
+      recordToolCall: (o) =>
+        ledger(
+          state,
+          'tool_called',
+          { tool: o.tool, params: o.params, durationMs: o.durationMs, resultSize: o.resultSize, ok: o.ok },
+          meta(),
+        ),
+      recordLlmCall: (o) =>
+        ledger(
+          state,
+          'llm_call',
+          {
+            role: o.role,
+            model: o.model,
+            inputTokens: o.inputTokens,
+            outputTokens: o.outputTokens,
+            totalTokens: o.totalTokens,
+            durationMs: o.durationMs,
+            ok: o.ok,
+          },
+          meta(),
+        ),
+    };
+  }
 
   function approvedSet(state: OrchestratorState): Set<string> {
     const raw = state.workspace.sharedFacts[APPROVED_KEY];
@@ -393,7 +429,7 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
   ): Promise<OrchestratorState> {
     const onProgress = options.onProgress ?? noop;
     const state = ingest(request);
-    return doPlan(state, request, onProgress);
+    return withRunObserver(makeRunObserver(state), () => doPlan(state, request, onProgress));
   }
 
   async function resume(
@@ -402,6 +438,14 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
     options: RunOptions = {},
   ): Promise<OrchestratorState> {
     const onProgress = options.onProgress ?? noop;
+    return withRunObserver(makeRunObserver(state), () => resumeRun(state, resumption, onProgress));
+  }
+
+  async function resumeRun(
+    state: OrchestratorState,
+    resumption: Resumption,
+    onProgress: OnProgress,
+  ): Promise<OrchestratorState> {
     const interrupt = state.interruptState;
     if (!interrupt) return drive(state, onProgress); // nothing pending → just continue
 

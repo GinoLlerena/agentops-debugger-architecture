@@ -12,6 +12,7 @@ export const LedgerEventType = z.enum([
   'task_routed',
   'task_started',
   'tool_called',
+  'llm_call',
   'evidence_attached',
   'guardrail_drop',
   'clarification_required',
@@ -34,8 +35,10 @@ export const LedgerEvent = z.object({
   taskId: z.string().optional(),
   /**
    * Event-specific payload. For `tool_called`: { tool, params, durationMs,
-   * resultSize }. For `guardrail_drop`: { statement, reason }. Pretty-printed
-   * and key-humanized in the trace sheet. Never contains secrets (no auth_key).
+   * resultSize }. For `llm_call`: { role, model, inputTokens, outputTokens,
+   * totalTokens, durationMs } (token usage + latency for cost observability).
+   * For `guardrail_drop`: { statement, reason }. Pretty-printed and key-humanized
+   * in the trace sheet. Never contains secrets (no auth_key, no API keys).
    */
   payload: z.record(z.unknown()).default({}),
 });

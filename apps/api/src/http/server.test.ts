@@ -91,6 +91,15 @@ describe('Flow B — POST /agent/ask (streaming)', () => {
     expect(eventTypes).toContain('task_routed');
     expect(eventTypes).toContain('evidence_attached');
     expect(eventTypes).toContain('task_done');
+    // Offline agents call the OEFA/RAG services directly; instrumentService records
+    // each as a tool_called ledger event with the documented payload shape.
+    expect(eventTypes).toContain('tool_called');
+    const toolCall = body.events.find((e) => e.type === 'tool_called') as
+      | { payload: { tool: string; durationMs: number; ok: boolean } }
+      | undefined;
+    expect(toolCall?.payload.tool).toMatch(/^(oefa|rag)\./);
+    expect(typeof toolCall?.payload.durationMs).toBe('number');
+    expect(toolCall?.payload.ok).toBe(true);
   });
 });
 

@@ -23,6 +23,7 @@ import { AGENT_IDS } from '../manifests/registry.js';
 import type { AgentRunContext, SpecialistAgent } from '../coordinator/types.js';
 import { toMastraTools } from './mastra-tool.js';
 import { DATA_AGENT_PROMPT, DOCS_AGENT_PROMPT, languageDirective } from './prompts.js';
+import { recordLlmCall } from '../../observability/instrument.js';
 import { NoopTranslator, translateQuery, type Translator } from '../../services/translation/index.js';
 
 /**
@@ -65,13 +66,18 @@ function taskPrompt(task: DomainTaskPacket, language: Language): string {
  * result (errors are data). Not unit-tested (needs a live model); the
  * orchestration engine is tested with mocked agents instead.
  */
-export function toSpecialistAgent(agentId: string, agent: Agent): SpecialistAgent {
+export function toSpecialistAgent(agentId: string, agent: Agent, modelId?: string): SpecialistAgent {
   return {
     agentId,
     async run(task: DomainTaskPacket, ctx: AgentRunContext): Promise<DomainTaskResult> {
+      const start = Date.now();
       try {
         const res = await agent.generate(taskPrompt(task, ctx.state.language), {
           structuredOutput: { schema: AgentOutputSchema },
+        });
+        recordLlmCall('chat', Date.now() - start, true, {
+          model: modelId,
+          usage: (res as { usage?: unknown }).usage,
         });
         const out = res.object as AgentOutput;
         return {
@@ -88,6 +94,7 @@ export function toSpecialistAgent(agentId: string, agent: Agent): SpecialistAgen
           warnings: [],
         };
       } catch (err) {
+        recordLlmCall('chat', Date.now() - start, false, { model: modelId });
         return {
           taskId: task.taskId,
           agentId,
@@ -158,8 +165,9 @@ export function toLiveDataAgent(
   agent: Agent,
   oefa: OefaService,
   translator: Translator = new NoopTranslator(),
+  modelId?: string,
 ): SpecialistAgent {
-  const narrator = toSpecialistAgent(AGENT_IDS.data, agent);
+  const narrator = toSpecialistAgent(AGENT_IDS.data, agent, modelId);
   return {
     agentId: AGENT_IDS.data,
     async run(task: DomainTaskPacket, ctx: AgentRunContext): Promise<DomainTaskResult> {
@@ -218,9 +226,19 @@ export function createSpecialistAgents(deps: {
   const idgen = deps.idgen ?? (() => crypto.randomUUID().split('-')[0]!);
   const clock = deps.clock ?? (() => new Date());
   const translator = deps.translator ?? new NoopTranslator();
+  const chatModelId = deps.qwen.chatModelId;
   return {
-    [AGENT_IDS.data]: toLiveDataAgent(createDataMastraAgent(deps.qwen, deps.oefa), deps.oefa, translator),
-    [AGENT_IDS.docs]: toSpecialistAgent(AGENT_IDS.docs, createDocsMastraAgent(deps.qwen, deps.rag)),
+    [AGENT_IDS.data]: toLiveDataAgent(
+      createDataMastraAgent(deps.qwen, deps.oefa),
+      deps.oefa,
+      translator,
+      chatModelId,
+    ),
+    [AGENT_IDS.docs]: toSpecialistAgent(
+      AGENT_IDS.docs,
+      createDocsMastraAgent(deps.qwen, deps.rag),
+      chatModelId,
+    ),
     [AGENT_IDS.report]: createOfflineReportAgent(deps.reportStore, idgen, clock),
     [AGENT_IDS.reportManager]: createOfflineReportManager(deps.reportStore),
   };

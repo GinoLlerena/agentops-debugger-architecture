@@ -9,6 +9,7 @@ const EVENT_KEYS: Record<string, MessageKey> = {
   task_routed: 'trace.event.task_routed',
   task_started: 'trace.event.task_started',
   tool_called: 'trace.event.tool_called',
+  llm_call: 'trace.event.llm_call',
   evidence_attached: 'trace.event.evidence_attached',
   guardrail_drop: 'trace.event.guardrail_drop',
   clarification_required: 'trace.event.clarification_required',
