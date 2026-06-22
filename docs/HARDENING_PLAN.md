@@ -24,8 +24,8 @@ confidence and operability. Do P0 first; each item is independently shippable.
 | 1 | Security | Body-size limit + rate limit on LLM endpoints | P0 | S | ✅ done |
 | 2 | Security | Security headers + error sanitization | P0 | S | ✅ done |
 | 3 | Tenancy | Full-UUID sessionId + demo-token middleware | P0 | S | ✅ done |
-| 4 | Observability | pino + correlation ID + redaction + HTTP logging | P0 | M | ⬜ todo |
-| 5 | Observability | Emit `tool_called` + capture LLM usage into ledger | P0 | M/L | ⬜ todo |
+| 4 | Observability | pino + correlation ID + redaction + HTTP logging | P0 | M | ✅ done |
+| 5 | Observability | Emit `tool_called` + capture LLM usage into ledger | P0 | M/L | ✅ done |
 | 6 | Observability | Add nullable `actor` to LedgerEvent (attribution-ready) | P1 | S | ⬜ todo |
 | 7 | Smoke tests | Deep-health endpoint (`/health/deep`) | P1 | S | ⬜ todo |
 | 8 | Smoke tests | Env-gated `pnpm test:integration` suite | P1 | M | ⬜ todo |
@@ -34,12 +34,17 @@ confidence and operability. Do P0 first; each item is independently shippable.
 | 11 | Streaming | Await coordinator SSE emits so `done` can't race `result` | P0 | S | ✅ done |
 | 12 | Validation | `OrchestratorState.safeParse` on persisted load | P1 | S | ⬜ todo |
 
-> **Implementation status (2026-06-22):** P0 items 1, 2, 3, 11 implemented on `main`
-> (working tree), with tests (`apps/api/src/http/server.test.ts`, +6 cases) and the
-> coordinator suite green; full repo typecheck + build pass. New files:
-> `apps/api/src/http/rate-limit.ts`, `apps/api/src/http/demo-gate.ts`. Remaining P0:
-> items 4 and 5 (the logging core). The demo gate uses the **cookie-unlock** design
-> (`/unlock?token=…` → httpOnly `demo_token` cookie; gate scoped to API prefixes).
+> **Implementation status (2026-06-22): all P0 done** — items 1, 2, 3, 4, 5, 11
+> committed on branch `hardening/p0-edge` (3 commits). 188 api + 30 web tests green
+> (+tool_called trace + correlation-header + demo-gate + 413/429 cases); full repo
+> typecheck + build + lint clean. New files: `http/rate-limit.ts`, `http/demo-gate.ts`,
+> `observability/{logger,http-logger,run-context,instrument}.ts`. Shared gained the
+> `llm_call` ledger event. Demo gate = **cookie-unlock** (`/unlock?token=…` →
+> httpOnly `demo_token`, API-prefix-scoped). Tool/LLM observability uses an
+> AsyncLocalStorage run-observer + `instrumentService` proxy as the single chokepoint
+> covering live (tools→service) and offline (direct service calls); verified offline
+> a Flow B run records 3 `tool_called` with agent attribution, no double-counting.
+> **Remaining = P1 only (items 6–10, 12).**
 
 Effort: S ≈ <½ day, M ≈ ½–1 day, M/L ≈ ~1 day.
 
