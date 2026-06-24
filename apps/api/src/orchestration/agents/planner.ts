@@ -7,10 +7,15 @@ import type { Planner, PlanResult } from '../coordinator/types.js';
 import { COORDINATOR_PROMPT, languageDirective } from './prompts.js';
 import { recordLlmCall } from '../../observability/instrument.js';
 
+// What we ask the LLM to return. Deliberately looser than the internal task
+// contract: `taskId` is assigned by us (line below), never invented by the model,
+// and `kind` is optional because models reliably emit the *content* (tasks /
+// clarification / text) but not always the discriminator — we infer it. This
+// keeps the live planner resilient to normal model output variance.
 const PlanOutputSchema = z.object({
-  kind: z.enum(['plan', 'clarification', 'reply']),
+  kind: z.enum(['plan', 'clarification', 'reply']).optional(),
   reasoning: z.string().optional(),
-  tasks: z.array(DomainTaskPacket).optional(),
+  tasks: z.array(DomainTaskPacket.omit({ taskId: true })).optional(),
   clarification: ClarificationRequest.optional(),
   text: z.string().optional(),
 });
@@ -27,7 +32,10 @@ function manifestSummary(): string {
  * {@link PlanResult}. Not unit-tested (needs a live model); the engine is tested
  * with a mocked planner.
  */
-export function createQwenPlanner(qwen: QwenProvider): Planner {
+export function createQwenPlanner(
+  qwen: QwenProvider,
+  idgen: () => string = () => crypto.randomUUID().split('-')[0]!,
+): Planner {
   const agent = new Agent({
     id: AGENT_IDS.coordinator,
     name: 'Coordinador',
@@ -52,13 +60,19 @@ export function createQwenPlanner(qwen: QwenProvider): Planner {
         usage: (res as { usage?: unknown }).usage,
       });
       const out = res.object as z.infer<typeof PlanOutputSchema>;
-      if (out.kind === 'clarification' && out.clarification) {
+      // Assign task ids ourselves (the coordinator keys ledger/approval state on
+      // them); the model only supplies domain/operation/title/instruction.
+      const tasks = (out.tasks ?? []).map((t) => ({ ...t, taskId: idgen() }));
+      // Infer the discriminator when the model omits it: a clarification object
+      // wins, then any tasks → plan, else a direct reply.
+      const kind = out.kind ?? (out.clarification ? 'clarification' : tasks.length > 0 ? 'plan' : 'reply');
+      if (kind === 'clarification' && out.clarification) {
         return { kind: 'clarification', clarification: out.clarification };
       }
-      if (out.kind === 'reply') {
+      if (kind === 'reply') {
         return { kind: 'reply', text: out.text ?? 'No encontré evidencia en las fuentes consultadas.' };
       }
-      return { kind: 'plan', reasoning: out.reasoning ?? '', tasks: out.tasks ?? [] };
+      return { kind: 'plan', reasoning: out.reasoning ?? '', tasks };
     },
   };
 }
