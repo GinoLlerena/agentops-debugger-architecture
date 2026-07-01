@@ -114,13 +114,20 @@ export function resolveManifestForTask(
   return manifest;
 }
 
-/** Whether a routed task must pass the HITL approval gate before running. */
+/**
+ * Whether a routed task must pass the HITL approval gate before running.
+ *
+ * A per-task policy may only ESCALATE to `required` — never waive the
+ * manifest's gate. Task packets are LLM output in live mode (planner and
+ * agent-emitted `nextTasks`), so honoring a task-level `'none'` would let
+ * model variance or prompt injection skip the human approval on the one
+ * side effect the gate exists to protect.
+ */
 export function requiresApproval(
   operation: DomainOperation,
   manifest: AgentManifest,
   taskPolicy?: 'none' | 'required',
 ): boolean {
   if (taskPolicy === 'required') return true;
-  if (taskPolicy === 'none') return false;
   return manifest.approvalPolicy === 'required' && SIDE_EFFECTING_OPS.has(operation);
 }

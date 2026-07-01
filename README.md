@@ -72,8 +72,9 @@ in `docs/IMPLEMENTATION_PLAN.md` / `docs/files/agentops-debugger-architecture.md
 | GET | `/reports`, `/reports/:id`, `/reports/:id/export/:fmt` | reports + export (pdf/docx/xlsx) |
 | GET | `/sessions`, `/sessions/:id`, `/sessions/:id/snapshot` | session list / detail / rehydrate |
 
-> No auth layer today — fine for offline/local and the proof-based hackathon
-> deploy; add a middleware before exposing a persistent public URL.
+> No user accounts — for a public URL, set `DEMO_ACCESS_TOKEN` to gate the API
+> behind a shared unlock link, plus `RATE_LIMIT_PER_MIN`; see
+> [`docs/DEPLOY.md`](docs/DEPLOY.md) §10. Offline/local runs stay fully open.
 
 ## Stack
 

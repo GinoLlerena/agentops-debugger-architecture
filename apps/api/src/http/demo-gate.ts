@@ -27,6 +27,13 @@ function isHttps(c: Context): boolean {
   }
 }
 
+/** Whether this request has demo access: gate disabled, or a valid cookie. */
+export function hasDemoAccess(c: Context, token: string | undefined): boolean {
+  if (!token) return true;
+  const supplied = getCookie(c, COOKIE);
+  return Boolean(supplied && tokensMatch(supplied, token));
+}
+
 /**
  * Gate the API surface behind a shared demo token. When `token` is unset the
  * middleware is a pass-through (offline/dev stay fully open). When set, a request
@@ -42,8 +49,7 @@ export function demoGate(token: string | undefined): MiddlewareHandler {
     };
   }
   return async (c, next) => {
-    const supplied = getCookie(c, COOKIE);
-    if (supplied && tokensMatch(supplied, token)) {
+    if (hasDemoAccess(c, token)) {
       await next();
       return;
     }

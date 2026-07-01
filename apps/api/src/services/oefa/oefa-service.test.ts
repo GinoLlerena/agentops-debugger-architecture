@@ -98,6 +98,50 @@ describe('OefaService cache fallback (FR-14)', () => {
     const broken = new OefaService(new ThrowingSource());
     await expect(broken.getRecords()).rejects.toThrow(/OEFA caído/);
   });
+
+  it('a capped fetch (e.g. deep-health maxRows:1) never clobbers the full cached copy', async () => {
+    const cache = new InMemoryOefaCache();
+    const warm = new OefaService(new SeedRecordSource(SEED), cache);
+    await warm.getRecords(); // full fetch → cached
+    await warm.getRecords(undefined, { maxRows: 1 }); // health-probe-shaped fetch
+
+    const broken = new OefaService(new ThrowingSource(), cache);
+    const served = await broken.getRecords();
+    expect(served.records).toHaveLength(SEED.length); // still the full copy
+  });
+
+  it('a capped fetch does not populate an empty cache', async () => {
+    const cache = new InMemoryOefaCache();
+    const warm = new OefaService(new SeedRecordSource(SEED), cache);
+    await warm.getRecords(undefined, { maxRows: 1 });
+
+    const broken = new OefaService(new ThrowingSource(), cache);
+    await expect(broken.getRecords()).rejects.toThrow(/OEFA caído/);
+  });
+
+  it('preserves the partial flag across the cache round-trip (FR-12)', async () => {
+    class PartialSource implements OefaRecordSource {
+      async fetchRecords(): Promise<FetchedRecords> {
+        return { records: SEED, total: 999, partial: true };
+      }
+    }
+    const cache = new InMemoryOefaCache();
+    await new OefaService(new PartialSource(), cache).getRecords();
+
+    const broken = new OefaService(new ThrowingSource(), cache);
+    const served = await broken.getRecords();
+    expect(served.partial).toBe(true);
+  });
+
+  it('a capped serve from cache is labeled partial', async () => {
+    const cache = new InMemoryOefaCache();
+    await new OefaService(new SeedRecordSource(SEED), cache).getRecords();
+
+    const broken = new OefaService(new ThrowingSource(), cache);
+    const served = await broken.getRecords(undefined, { maxRows: 1 });
+    expect(served.records).toHaveLength(1);
+    expect(served.partial).toBe(true);
+  });
 });
 
 describe('computeStats', () => {

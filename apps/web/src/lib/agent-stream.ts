@@ -275,13 +275,15 @@ export function reduceEvent(state: ChatState, event: StreamEvent): ChatState {
   }
 }
 
-/** Parse a buffer of SSE text into complete events; returns leftover partial text. */
+/** Parse a buffer of SSE text into complete events; returns leftover partial text.
+ *  Frames are split on LF or CRLF blank lines — our server emits LF, but a
+ *  reverse proxy between us and it may re-frame with CRLF (SSE allows both). */
 export function parseSSEBuffer(buffer: string): { events: StreamEvent[]; rest: string } {
   const events: StreamEvent[] = [];
-  const blocks = buffer.split('\n\n');
-  const rest = blocks.pop() ?? ''; // last item is an incomplete block (no trailing \n\n yet)
+  const blocks = buffer.split(/\r?\n\r?\n/);
+  const rest = blocks.pop() ?? ''; // last item is an incomplete block (no trailing blank line yet)
   for (const block of blocks) {
-    const dataLine = block.split('\n').find((l) => l.startsWith('data:'));
+    const dataLine = block.split(/\r?\n/).find((l) => l.startsWith('data:'));
     if (!dataLine) continue;
     try {
       const parsed = StreamEvent.safeParse(JSON.parse(dataLine.slice('data:'.length).trim()));

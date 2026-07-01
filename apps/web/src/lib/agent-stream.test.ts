@@ -34,6 +34,21 @@ describe('parseSSEBuffer', () => {
     const { events } = parseSSEBuffer('data: {"type":"bogus","payload":{}}\n\n');
     expect(events).toEqual([]);
   });
+
+  it('parses CRLF-framed events (proxy re-framing between us and the server)', () => {
+    const e1: StreamEvent = { type: 'task_start', payload: { taskId: 't1', agentId: 'a', title: 'T' } };
+    const crlf = `event: task_start\r\ndata: ${JSON.stringify(e1)}\r\n\r\n`;
+    const { events, rest } = parseSSEBuffer(crlf);
+    expect(events).toHaveLength(1);
+    expect(events[0]!.type).toBe('task_start');
+    expect(rest).toBe('');
+  });
+
+  it('ignores comment-only heartbeat frames', () => {
+    const e1: StreamEvent = { type: 'task_start', payload: { taskId: 't1', agentId: 'a', title: 'T' } };
+    const { events } = parseSSEBuffer(`: ping\n\n${sse(e1)}`);
+    expect(events).toHaveLength(1);
+  });
 });
 
 describe('reduceEvent — plan morphs into a live checklist', () => {

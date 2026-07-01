@@ -12,6 +12,9 @@ export interface OefaCacheEntry {
   total?: number;
   fetchedAt: string;
   coverage?: string;
+  /** Whether the cached fetch was itself truncated by the upstream, so a
+   *  fallback serve can keep labeling it honestly (FR-12). */
+  partial?: boolean;
 }
 
 export interface OefaCache {

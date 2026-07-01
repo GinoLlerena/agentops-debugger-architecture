@@ -237,15 +237,24 @@ export class OefaService {
     try {
       const { records, total, partial } = await this.source.fetchRecords(datasetKey, opts);
       const fetchedAt = this.clock().toISOString();
-      await this.cache.set(key, { records, total, fetchedAt, coverage });
+      // Only a full fetch may populate the fallback cache: the key is per-dataset,
+      // so a capped fetch (e.g. the deep-health probe's maxRows: 1) would otherwise
+      // clobber the durable full copy the outage fallback depends on.
+      if (opts.maxRows == null) {
+        await this.cache.set(key, { records, total, fetchedAt, coverage, partial });
+      }
       return { records, total, partial, fromCache: false, fetchedAt, datasetId: dataset.id, coverage };
     } catch (err) {
       const cached = await this.cache.get(key);
       if (!cached) throw err;
+      const records =
+        opts.maxRows != null ? cached.records.slice(0, opts.maxRows) : cached.records;
       return {
-        records: cached.records.map((r) => ({ ...r, fromCache: true })),
+        records: records.map((r) => ({ ...r, fromCache: true })),
         total: cached.total,
-        partial: false,
+        // Honest labeling survives the cache round-trip: a capped serve of the
+        // cached copy is partial even if the original fetch was complete.
+        partial: (cached.partial ?? false) || records.length < cached.records.length,
         fromCache: true,
         fetchedAt: cached.fetchedAt,
         datasetId: dataset.id,

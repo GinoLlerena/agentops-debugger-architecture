@@ -11,7 +11,7 @@ import { requestId } from 'hono/request-id';
 import { secureHeaders } from 'hono/secure-headers';
 import { streamSSE } from 'hono/streaming';
 import { z, ZodError } from 'zod';
-import { demoGate, unlockHandler } from './demo-gate.js';
+import { demoGate, hasDemoAccess, unlockHandler } from './demo-gate.js';
 import { deepHealth } from './health.js';
 import { clientIp, rateLimit } from './rate-limit.js';
 import { OEFA_DATASETS } from '../services/oefa/datasets.js';
@@ -74,11 +74,21 @@ export function createServer(deps: AppDeps): AppServer {
 
   app.get('/health', (c) => c.json({ status: 'ok', mode: deps.mode }));
   // Deep health: actively pings each configured integration (manual/deploy
-  // verification + observability). Left open like /health. The Qwen probe is
-  // config-only unless `?llm=1`, so polling can't burn model credits.
-  app.get('/health/deep', async (c) =>
-    c.json(await deepHealth(deps, { llm: c.req.query('llm') === '1' })),
-  );
+  // verification + observability). Left open like /health so uptime monitors
+  // work without a cookie, but rate-limited (its probes hit paid backends) and
+  // the `?llm=1` real-generation probe additionally requires demo access when
+  // the gate is configured — an anonymous visitor must not be able to trigger
+  // DashScope spend on a public deploy.
+  app.get('/health/deep', rateLimit(deps.env.RATE_LIMIT_PER_MIN), async (c) => {
+    const llm = c.req.query('llm') === '1';
+    if (llm && !hasDemoAccess(c, deps.env.DEMO_ACCESS_TOKEN)) {
+      return c.json(
+        { error: 'La prueba con modelo (?llm=1) requiere el token de demostración.' },
+        401,
+      );
+    }
+    return c.json(await deepHealth(deps, { llm }));
+  });
 
   /**
    * Run a coordinator turn and stream it. Validation/precondition failures return
@@ -232,34 +242,48 @@ function streamTurn(
       }
     };
 
-    let next: OrchestratorState | undefined;
-    try {
-      next = await run(send);
-    } catch (err) {
-      // Sanitize the same way as app.onError: the real error is logged server-side,
-      // the SSE `error` frame carries only a stable code + generic message.
-      log.error({ err }, 'orchestrator error');
-      await send({
-        type: 'error',
-        payload: { code: 'orchestrator_error', message: 'Error interno del orquestador.' },
+    // SSE comment-frame heartbeat: long Qwen calls can leave the stream silent
+    // for tens of seconds, and idle-timeout proxies (FC/ALB) kill quiet
+    // connections. Comment lines are invisible to SSE parsers, so the typed
+    // event contract is unaffected.
+    const heartbeat = setInterval(() => {
+      stream.write(': ping\n\n').catch(() => {
+        /* client gone */
       });
-    }
+    }, 15_000);
 
-    let status: ExecutionStatus = next?.executionStatus ?? 'failed';
-    let sessionId = next?.sessionId ?? 'unknown';
-    if (next) {
+    try {
+      let next: OrchestratorState | undefined;
       try {
-        await deps.sessionStore.saveState(next);
+        next = await run(send);
       } catch (err) {
-        log.error({ err }, 'persist error');
-        status = 'failed';
-        sessionId = next.sessionId;
+        // Sanitize the same way as app.onError: the real error is logged server-side,
+        // the SSE `error` frame carries only a stable code + generic message.
+        log.error({ err }, 'orchestrator error');
         await send({
           type: 'error',
-          payload: { code: 'persist_error', message: 'No se pudo guardar la sesión.' },
+          payload: { code: 'orchestrator_error', message: 'Error interno del orquestador.' },
         });
       }
+
+      let status: ExecutionStatus = next?.executionStatus ?? 'failed';
+      let sessionId = next?.sessionId ?? 'unknown';
+      if (next) {
+        try {
+          await deps.sessionStore.saveState(next);
+        } catch (err) {
+          log.error({ err }, 'persist error');
+          status = 'failed';
+          sessionId = next.sessionId;
+          await send({
+            type: 'error',
+            payload: { code: 'persist_error', message: 'No se pudo guardar la sesión.' },
+          });
+        }
+      }
+      await send({ type: 'done', payload: { sessionId, status } });
+    } finally {
+      clearInterval(heartbeat);
     }
-    await send({ type: 'done', payload: { sessionId, status } });
   });
 }

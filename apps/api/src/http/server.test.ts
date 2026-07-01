@@ -250,6 +250,28 @@ describe('edge hardening', () => {
     expect((await app.request('/sessions')).status).toBe(200);
   });
 
+  it('gates the paid-model probe: /health/deep?llm=1 needs demo access when a token is set', async () => {
+    const gated = createServer(await buildDeps(getEnv({ DEMO_ACCESS_TOKEN: 'sekret' })));
+
+    // config-only deep health stays open (uptime monitors keep working)
+    expect((await gated.request('/health/deep')).status).toBe(200);
+
+    // the real-generation probe without the cookie → 401, no model call
+    expect((await gated.request('/health/deep?llm=1')).status).toBe(401);
+
+    // with the demo cookie the probe is allowed (offline: qwen just reports skipped)
+    const cookie = (await gated.request('/unlock?token=sekret')).headers
+      .get('set-cookie')!
+      .split(';')[0]!;
+    expect((await gated.request('/health/deep?llm=1', { headers: { cookie } })).status).toBe(200);
+  });
+
+  it('rate-limits /health/deep (its probes hit paid backends)', async () => {
+    const limited = createServer(await buildDeps(getEnv({ RATE_LIMIT_PER_MIN: '1' })));
+    expect((await limited.request('/health/deep')).status).toBe(200);
+    expect((await limited.request('/health/deep')).status).toBe(429);
+  });
+
   it('does not leak internal error detail in the 500 body', async () => {
     // A non-Zod failure surfaces as a generic message, not the raw error text.
     const res = await app.request('/reports/%2e%2e'); // odd id; exercises the handler
