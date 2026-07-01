@@ -44,8 +44,14 @@ describe('requiresApproval', () => {
     expect(requiresApproval('create', dataAgent)).toBe(false);
   });
 
-  it('honors an explicit per-task policy override', () => {
+  it('a per-task policy can escalate to required', () => {
     expect(requiresApproval('search', reportManager, 'required')).toBe(true);
-    expect(requiresApproval('create', reportManager, 'none')).toBe(false);
+  });
+
+  it("a per-task 'none' (LLM-authored in live mode) cannot waive the manifest gate", () => {
+    expect(requiresApproval('create', reportManager, 'none')).toBe(true);
+    expect(requiresApproval('delete', reportManager, 'none')).toBe(true);
+    // still no gate where the manifest never required one
+    expect(requiresApproval('create', dataAgent, 'none')).toBe(false);
   });
 });

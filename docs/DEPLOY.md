@@ -212,12 +212,26 @@ docker push registry.<region>.aliyuncs.com/<ns>/agentops-debugger:latest
 
 Replace `$HOST` with your deployed origin.
 
+> **If `DEMO_ACCESS_TOKEN` is set (§10),** the `/agent/*`, `/sessions`, `/trace`,
+> `/reports`, `/rag` and `/oefa` endpoints below return **401** until you unlock:
+> `curl -c cookies.txt "$HOST/unlock?token=$DEMO_ACCESS_TOKEN"` once, then add
+> `-b cookies.txt` to each gated `curl`. `/health` and `/health/deep` stay open
+> (only the `?llm=1` probe needs the cookie).
+
 ```bash
+# 0. deep health — pings every configured integration in one shot; the fastest
+#    deploy verification (Tablestore/OSS/OEFA probes + Qwen config check).
+#    Expect {"status":"ok","mode":"live","services":{...}} with per-service latency.
+curl -s $HOST/health/deep
+#    Add ?llm=1 for ONE real Qwen generation (proves the model round-trip; costs
+#    ~1 token; requires the demo cookie when DEMO_ACCESS_TOKEN is set):
+curl -s -b cookies.txt "$HOST/health/deep?llm=1"
+
 # 1. health → expect {"status":"ok","mode":"live"}  (mode:"live" needs DASHSCOPE_API_KEY)
 curl -s $HOST/health
 
 # 2. Flow B — streamed, cited answer
-curl -N -X POST $HOST/agent/ask -H 'content-type: application/json' \
+curl -N -X POST $HOST/agent/ask -H 'content-type: application/json' -b cookies.txt \
   -d '{"text":"Antecedentes del administrado con RUC 20543210981","sessionId":"deploy-smoke"}'
 
 # 3. trace reproduces the run (proves Tablestore persistence)
@@ -232,6 +246,8 @@ curl -s $HOST/reports/<reportId>/export/pdf -o informe.pdf && file informe.pdf
 ```
 
 Checklist:
+- [ ] `/health/deep` reports every configured service `ok` (and `?llm=1` proves
+      a real Qwen generation).
 - [ ] `/health` reports `mode: "live"`.
 - [ ] A fresh `sessionId` appears in `/sessions` **after a process restart**
       (confirms Tablestore, not in-memory).
@@ -284,8 +300,32 @@ So you do **not** need to keep compute running. Recommended flow:
 
 ## 10. Security
 
+For any **publicly reachable** deploy, set the three edge-hardening vars
+(all optional; the offline/local defaults leave them off):
+
+```bash
+# Gate the API behind a shared demo token. Visitors open
+#   $HOST/unlock?token=<value>
+# once (sets an httpOnly demo_token cookie, 12 h), then use the app normally.
+# /health, /health/deep, /unlock, static assets and the SPA stay open; the
+# paid-model probe /health/deep?llm=1 requires the cookie.
+DEMO_ACCESS_TOKEN=<long-random-string>
+
+# Per-IP token-bucket rate limit on /agent/*, /rag/retrieve and /health/deep.
+# Default 0 = disabled — set it (e.g. 60) on any public URL.
+RATE_LIMIT_PER_MIN=60
+
+# Max request body for the POST endpoints (default 32768 bytes).
+BODY_LIMIT_BYTES=32768
+```
+
+Give the demo token to judges in the Devpost "testing instructions" field as the
+full unlock link.
+
 - [ ] Real keys live only in the compute env / secrets manager — **never** in
       git. `.env.example` ships placeholders only; `.env` is gitignored.
+- [ ] On a public URL: `DEMO_ACCESS_TOKEN` and `RATE_LIMIT_PER_MIN` are set (see
+      above), and the unlock link is recorded for the demo/judges.
 - [ ] Use a **RAM** user with least-privilege policies, not the root AccessKey.
 - [ ] `auth_key` is never logged or placed in URLs (the Junar client redacts it).
 - [ ] Keep the OSS bucket private — objects are written and read back by the app
