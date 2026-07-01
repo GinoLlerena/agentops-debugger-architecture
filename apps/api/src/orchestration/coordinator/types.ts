@@ -1,4 +1,5 @@
 import type {
+  Actor,
   AgentManifestRegistry,
   ArtifactRecord,
   ClarificationRequest,
@@ -63,6 +64,9 @@ export interface CoordinatorDeps {
 
 export interface RunOptions {
   onProgress?: OnProgress;
+  /** Originator captured at the HTTP boundary (ip now; id/role once auth lands).
+   *  Stamped onto every ledger event of the run for attribution. */
+  actor?: Actor;
 }
 
 export interface Coordinator {

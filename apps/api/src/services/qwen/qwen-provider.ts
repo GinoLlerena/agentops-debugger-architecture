@@ -1,4 +1,4 @@
-import { createOpenAI, type OpenAIProvider } from '@ai-sdk/openai';
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { generateText, type LanguageModel } from 'ai';
 import { getEnv, isQwenConfigured, type Env } from '../../config/env.js';
 
@@ -6,10 +6,14 @@ import { getEnv, isQwenConfigured, type Env } from '../../config/env.js';
  * Qwen Cloud (DashScope) model provider — the core model integration and one of
  * the **Alibaba/Qwen-usage proof files** for the hackathon.
  *
- * DashScope exposes an OpenAI-compatible surface, so we configure the AI SDK's
- * OpenAI provider with the DashScope base URL. Mastra (Phase 2) consumes AI-SDK
- * `LanguageModel` instances directly, so `getChatModel()`/`getPlannerModel()`
- * are exactly what the agents/workflow will wire in.
+ * DashScope exposes an OpenAI-compatible surface, so we use the AI SDK's
+ * `@ai-sdk/openai-compatible` provider pointed at the DashScope base URL. We do
+ * NOT use `@ai-sdk/openai`: that provider classifies any non-OpenAI model id as a
+ * "reasoning model" and sends the system prompt with role `developer`, which
+ * DashScope's `/compatible-mode/v1` rejects (`'developer' is not one of [...]`).
+ * The openai-compatible provider speaks plain chat-completions with a `system`
+ * role. Mastra (Phase 2) consumes AI-SDK `LanguageModel` instances directly, so
+ * `getChatModel()`/`getPlannerModel()` are exactly what the agents/workflow wire in.
  *
  * Model roles:
  * - **chat model** (`QWEN_MODEL`, default `qwen-plus`): specialist agents.
@@ -43,8 +47,10 @@ export function createQwenProvider(env: Env = getEnv()): QwenProvider {
     );
   }
 
-  // DashScope is OpenAI-compatible; point the OpenAI provider at its base URL.
-  const provider: OpenAIProvider = createOpenAI({
+  // DashScope is OpenAI-compatible; point the openai-compatible provider at its
+  // base URL. `apiKey` is sent as `Authorization: Bearer …`.
+  const provider = createOpenAICompatible({
+    name: 'dashscope',
     apiKey: env.DASHSCOPE_API_KEY,
     baseURL: env.DASHSCOPE_BASE_URL,
   });
@@ -56,9 +62,9 @@ export function createQwenProvider(env: Env = getEnv()): QwenProvider {
     baseURL: env.DASHSCOPE_BASE_URL,
     chatModelId,
     plannerModelId,
-    getChatModel: () => provider(chatModelId),
-    getPlannerModel: () => provider(plannerModelId),
-    getModel: (role) => provider(role === 'planner' ? plannerModelId : chatModelId),
+    getChatModel: () => provider.chatModel(chatModelId),
+    getPlannerModel: () => provider.chatModel(plannerModelId),
+    getModel: (role) => provider.chatModel(role === 'planner' ? plannerModelId : chatModelId),
   };
 }
 

@@ -1,5 +1,6 @@
 import {
   DEFAULT_LANGUAGE,
+  type Actor,
   type DomainTaskPacket,
   type DomainTaskResult,
   type LedgerEvent,
@@ -16,6 +17,7 @@ import {
 } from '../manifests/registry.js';
 import { applyEvidenceGuardrail, collectKnownEvidenceIds } from './guardrail.js';
 import { collectEvidence, UI_SUPPRESSED_KEY } from './snapshot.js';
+import { withRunObserver, type RunObserver } from '../../observability/run-context.js';
 import { messages } from '../../i18n/messages.js';
 import { localizeEvidence, NoopTranslator } from '../../services/translation/index.js';
 import type {
@@ -30,6 +32,7 @@ import type {
 const DEFAULT_MAX_TASK_STEPS = 12;
 const APPROVED_KEY = 'approvedTaskIds';
 const REQUEST_KEY = 'originalRequest';
+const ACTOR_KEY = 'actor';
 
 const noop: OnProgress = () => {};
 
@@ -50,8 +53,10 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
   const maxTaskSteps = deps.maxTaskSteps ?? DEFAULT_MAX_TASK_STEPS;
   const translator = deps.translator ?? new NoopTranslator();
   const clock = deps.clock ?? (() => new Date());
-  let counter = 0;
-  const idgen = deps.idgen ?? (() => `id-${++counter}`);
+  // Default to unguessable UUIDs: a server-minted sessionId is the access boundary
+  // until real auth lands, so it must not be enumerable. Tests inject a
+  // deterministic idgen via deps.
+  const idgen = deps.idgen ?? (() => crypto.randomUUID());
 
   // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -61,6 +66,7 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
     payload: Record<string, unknown> = {},
     meta: { agentId?: string; taskId?: string } = {},
   ): void {
+    const actor = state.workspace.sharedFacts[ACTOR_KEY] as Actor | undefined;
     const event: LedgerEvent = {
       seq: state.ledger.length,
       sessionId: state.sessionId,
@@ -69,6 +75,7 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
       timestamp: clock().toISOString(),
       agentId: meta.agentId,
       taskId: meta.taskId,
+      actor,
       payload,
     };
     state.ledger.push(event);
@@ -77,6 +84,41 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
   const emit = async (onProgress: OnProgress, event: Parameters<OnProgress>[0]) => {
     await onProgress(event);
   };
+
+  /**
+   * Per-run observability sink: tool/service calls and LLM generations (recorded
+   * via AsyncLocalStorage from the instrumentation layer) land in the ledger as
+   * `tool_called` / `llm_call` events, attributed to whichever task is active.
+   * Keeping this on the run state — not a global — means concurrent runs never
+   * cross-contaminate, and the coordinator stays framework-agnostic.
+   */
+  function makeRunObserver(state: OrchestratorState): RunObserver {
+    const meta = () => ({ agentId: state.activeTask?.agentId, taskId: state.activeTask?.taskId });
+    return {
+      recordToolCall: (o) =>
+        ledger(
+          state,
+          'tool_called',
+          { tool: o.tool, params: o.params, durationMs: o.durationMs, resultSize: o.resultSize, ok: o.ok },
+          meta(),
+        ),
+      recordLlmCall: (o) =>
+        ledger(
+          state,
+          'llm_call',
+          {
+            role: o.role,
+            model: o.model,
+            inputTokens: o.inputTokens,
+            outputTokens: o.outputTokens,
+            totalTokens: o.totalTokens,
+            durationMs: o.durationMs,
+            ok: o.ok,
+          },
+          meta(),
+        ),
+    };
+  }
 
   function approvedSet(state: OrchestratorState): Set<string> {
     const raw = state.workspace.sharedFacts[APPROVED_KEY];
@@ -106,7 +148,7 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
 
   // ── steps ────────────────────────────────────────────────────────────────
 
-  function ingest(request: NormalizedUserRequest): OrchestratorState {
+  function ingest(request: NormalizedUserRequest, actor?: Actor): OrchestratorState {
     const runId = idgen();
     const sessionId = request.sessionId ?? idgen();
     const state: OrchestratorState = {
@@ -122,6 +164,8 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
       artifacts: {},
       ledger: [],
     };
+    // Stamp the originator before the first event so turn_opened carries it too.
+    if (actor) state.workspace.sharedFacts[ACTOR_KEY] = actor;
     ledger(state, 'turn_opened', { text: request.text });
     return state;
   }
@@ -244,26 +288,26 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
       }
 
       // apply (may suspend on clarification)
-      const suspended = applyResult(state, task, result, onProgress);
+      const suspended = await applyResult(state, task, result, onProgress);
       if (suspended) return state;
     }
     return finalize(state, onProgress);
   }
 
   /** Returns true if the run suspended (clarification) and the caller must stop. */
-  function applyResult(
+  async function applyResult(
     state: OrchestratorState,
     task: DomainTaskPacket,
     result: DomainTaskResult,
     onProgress: OnProgress,
-  ): boolean {
+  ): Promise<boolean> {
     // agent needs user input (e.g. ambiguous entity) → suspend, keep task at head
     if (result.status === 'needs_user_input' && result.clarification) {
       state.executionStatus = 'waiting';
       state.interruptState = { interruptId: idgen(), reason: 'clarification', taskId: task.taskId };
       state.pendingClarification = result.clarification; // persist for rehydration
       ledger(state, 'clarification_required', {}, { taskId: task.taskId, agentId: result.agentId });
-      void emit(onProgress, { type: 'clarification_required', payload: result.clarification });
+      await emit(onProgress, { type: 'clarification_required', payload: result.clarification });
       return true;
     }
 
@@ -314,7 +358,7 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
       { status: result.status, summary: result.summary },
       { taskId: task.taskId, agentId: result.agentId },
     );
-    void emit(onProgress, {
+    await emit(onProgress, {
       type: 'task_done',
       payload: { taskId: task.taskId, status: streamStatus, result: result.summary },
     });
@@ -367,7 +411,7 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
         ? [{ action: 'open_tab', tab: 'datos' }]
         : [];
 
-    void emit(onProgress, {
+    await emit(onProgress, {
       type: 'result',
       payload: {
         text,
@@ -390,8 +434,8 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
     options: RunOptions = {},
   ): Promise<OrchestratorState> {
     const onProgress = options.onProgress ?? noop;
-    const state = ingest(request);
-    return doPlan(state, request, onProgress);
+    const state = ingest(request, options.actor);
+    return withRunObserver(makeRunObserver(state), () => doPlan(state, request, onProgress));
   }
 
   async function resume(
@@ -400,6 +444,17 @@ export function createCoordinator(deps: CoordinatorDeps): Coordinator {
     options: RunOptions = {},
   ): Promise<OrchestratorState> {
     const onProgress = options.onProgress ?? noop;
+    // Re-stamp with the resuming request's originator so resume-turn events are
+    // attributed to whoever sent the resume (not the original start).
+    if (options.actor) state.workspace.sharedFacts[ACTOR_KEY] = options.actor;
+    return withRunObserver(makeRunObserver(state), () => resumeRun(state, resumption, onProgress));
+  }
+
+  async function resumeRun(
+    state: OrchestratorState,
+    resumption: Resumption,
+    onProgress: OnProgress,
+  ): Promise<OrchestratorState> {
     const interrupt = state.interruptState;
     if (!interrupt) return drive(state, onProgress); // nothing pending → just continue
 

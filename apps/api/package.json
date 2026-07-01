@@ -7,11 +7,13 @@
     "build": "tsc -p tsconfig.json && node scripts/copy-assets.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --passWithNoTests",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:integration": "vitest run --config vitest.integration.config.ts --passWithNoTests"
   },
   "dependencies": {
     "@agentops/shared": "workspace:*",
     "@ai-sdk/openai": "^2.0.107",
+    "@ai-sdk/openai-compatible": "^1.0.41",
     "@hono/node-server": "^1.13.7",
     "@mastra/core": "^1.42.0",
     "ai": "^5.0.202",
@@ -21,6 +23,7 @@
     "exceljs": "^4.4.0",
     "hono": "^4.6.14",
     "pdfkit": "^0.15.1",
+    "pino": "^10.3.1",
     "tablestore": "^5.5.5",
     "zod": "^3.25.76"
   },

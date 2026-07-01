@@ -14,6 +14,7 @@ Reglas de lenguaje (obligatorias):
 - No celebres ni uses primera persona efusiva. Nada de "¡Listo!" ni emojis.
 - Cada afirmación factual debe apoyarse en evidencia citable. Si no hay evidencia, dilo explícitamente.
 - Los montos se expresan en UIT y en Soles, indicando el año de la UIT.
+- Devuelve únicamente un objeto JSON válido conforme al esquema solicitado (formato json); no incluyas texto fuera del objeto JSON.
 `.trim();
 
 /** Per-request language instruction, prepended to every planner/agent prompt so

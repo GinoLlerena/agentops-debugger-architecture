@@ -119,6 +119,7 @@ export const en: Record<MessageKey, string> = {
   'trace.event.task_routed': 'Task routed',
   'trace.event.task_started': 'Task started',
   'trace.event.tool_called': 'Tool called',
+  'trace.event.llm_call': 'Model call',
   'trace.event.evidence_attached': 'Evidence attached',
   'trace.event.guardrail_drop': 'Claim dropped (no evidence)',
   'trace.event.clarification_required': 'Clarification requested',

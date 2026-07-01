@@ -19,6 +19,7 @@ import { createQwenPlanner } from '../orchestration/agents/planner.js';
 import { createOfflineAgents, createOfflinePlanner } from '../orchestration/offline/offline-agents.js';
 import { SessionStore } from '../persistence/session-store.js';
 import { ReportStore } from '../persistence/report-store.js';
+import { instrumentService } from '../observability/instrument.js';
 import { ReportExporter } from '../services/report/report-exporter.js';
 import {
   CachedTranslator,
@@ -53,9 +54,18 @@ export async function buildDeps(env: Env = getEnv()): Promise<AppDeps> {
     : new SeedRecordSource(RUIAS_SEED);
   // Durable cache (FR-14): Tablestore in live mode, in-memory document store
   // offline — survives restarts so cached OEFA data is served after a cold start.
-  const oefa = new OefaService(source, new DocumentStoreOefaCache(stores.documents));
+  // The service is instrumented so each top-level call made during a run is
+  // recorded as a `tool_called` ledger event (the single chokepoint covering both
+  // live tool calls and offline direct calls); a no-op outside a run (REST reads).
+  const oefa = instrumentService(
+    new OefaService(source, new DocumentStoreOefaCache(stores.documents)),
+    'oefa',
+    ['getRecords', 'searchRecords', 'getCompanyProfile'],
+  );
 
-  const rag = new RagService({ embedder: maybeCreateEmbedder(env) });
+  const rag = instrumentService(new RagService({ embedder: maybeCreateEmbedder(env) }), 'rag', [
+    'retrieve',
+  ]);
   await rag.indexDocuments(await loadSeedCorpus());
 
   const reportStore = new ReportStore(stores.documents);
