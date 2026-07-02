@@ -34,6 +34,12 @@ testable with zero keys.
 
 ## Diagram
 
+Rendered image (for Devpost / quick viewing): [`files/architecture.png`](files/architecture.png)
+
+![Architecture diagram](files/architecture.png)
+
+Source (edit this, re-render with `npx @mermaid-js/mermaid-cli -i arch.mmd -o architecture.png -w 2200 -b white`):
+
 ```mermaid
 flowchart TB
   subgraph FE["Frontend · apps/web (React/Vite · TanStack · Tailwind · Recharts)"]
