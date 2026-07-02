@@ -6,12 +6,14 @@ import { EvidenceDrawer } from '../components/evidence.js';
 import { TraceSheet } from '../components/TraceSheet.js';
 import { Button } from '../components/ui.js';
 import { useAgentStream } from '../lib/use-agent.js';
+import { suggestionsFor } from '../lib/suggestions.js';
 import { useI18n, type MessageKey } from '../i18n/index.js';
 
 const SUGGESTION_KEYS: MessageKey[] = [
   'workspace.suggestion1',
   'workspace.suggestion2',
   'workspace.suggestion3',
+  'workspace.suggestListing',
 ];
 
 /** `sessionId` is a prop (the route wrapper keys the component by it) so each
@@ -34,6 +36,8 @@ export function Workspace({ sessionId }: { sessionId: string }) {
   // While rehydrating, keep the composer gated so a turn can't start against a
   // `waiting` session before its HITL card is restored (would 409 and lose it).
   const composerDisabled = busy || awaitingApproval || hydrating; // approvals must use the buttons
+  // Next-step chips above the composer — only for a settled successful turn.
+  const suggestions = suggestionsFor(state);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -102,6 +106,19 @@ export function Workspace({ sessionId }: { sessionId: string }) {
             )}
           </div>
           <div className="border-t border-linea p-3">
+            {!composerDisabled && suggestions.length > 0 && (
+              <div className="mb-2 flex flex-wrap gap-1.5">
+                {suggestions.map((s) => (
+                  <button
+                    key={s.key}
+                    onClick={() => void send(t(s.key, s.params))}
+                    className="rounded-full border border-linea px-3 py-1 text-xs text-gris-ev hover:bg-papel hover:text-tinta"
+                  >
+                    {t(s.key, s.params)}
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="flex items-center gap-2 rounded-card border border-linea px-3 py-2">
               <input
                 value={input}

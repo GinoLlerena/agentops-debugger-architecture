@@ -15,6 +15,7 @@ import type { OefaService } from '../../services/oefa/oefa-service.js';
 import { createRagTools, type RagService } from '../../services/rag/index.js';
 import type { ReportStore } from '../../persistence/report-store.js';
 import { buildDataArtifacts, entityQueryFor } from '../data-artifacts.js';
+import { detectListingIntent, runListingTask } from '../listing.js';
 import {
   createOfflineReportAgent,
   createOfflineReportManager,
@@ -254,18 +255,35 @@ export function toLiveDataAgent(
   oefa: OefaService,
   translator: Translator = new NoopTranslator(),
   modelId?: string,
+  clock: () => Date = () => new Date(),
 ): SpecialistAgent {
   const narrator = toSpecialistAgent(AGENT_IDS.data, agent, modelId);
   return {
     agentId: AGENT_IDS.data,
     async run(task: DomainTaskPacket, ctx: AgentRunContext): Promise<DomainTaskResult> {
+      const original = ctx.state.workspace.sharedFacts.originalRequest as { text?: string } | undefined;
+      const clarified = strInput(task.inputs.clarificationAnswer);
+      const rawQuery = strInput(task.inputs.query) ?? original?.text ?? task.instruction;
+      // A listing question is answered deterministically (entity list as
+      // clickable candidates) — no LLM call, so the live model's output variance
+      // can't break it and live/offline behave identically. A clarification
+      // answer means the user already picked an entity: normal flow below.
+      if (!clarified) {
+        const intent = detectListingIntent(rawQuery, clock());
+        if (intent) {
+          return runListingTask({
+            task,
+            agentId: AGENT_IDS.data,
+            oefa,
+            intent,
+            language: ctx.state.language,
+          });
+        }
+      }
       const result = await narrator.run(task, ctx);
       // Only attach artifacts for a resolved answer — a clarification or failure
       // has no entity to chart yet.
       if (result.status !== 'completed') return result;
-      const original = ctx.state.workspace.sharedFacts.originalRequest as { text?: string } | undefined;
-      const clarified = strInput(task.inputs.clarificationAnswer);
-      const rawQuery = strInput(task.inputs.query) ?? original?.text ?? task.instruction;
       // Inbound edge: the entity heuristic matches over the Spanish corpus, so a
       // non-Spanish query is translated first (a clarification answer is verbatim).
       const query = clarified ?? (await translateQuery(rawQuery, ctx.state.language, translator));
@@ -321,6 +339,7 @@ export function createSpecialistAgents(deps: {
       deps.oefa,
       translator,
       chatModelId,
+      clock,
     ),
     [AGENT_IDS.docs]: toSpecialistAgent(
       AGENT_IDS.docs,

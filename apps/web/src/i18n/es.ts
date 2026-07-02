@@ -47,6 +47,8 @@ export const es = {
   'workspace.suggestion1': 'Genera un informe de antecedentes del RUC 20543210981',
   'workspace.suggestion2': 'Antecedentes del administrado con RUC 20543210981',
   'workspace.suggestion3': '¿Qué sanciones tiene bambas?',
+  'workspace.suggestListing': 'Lístame las entidades sancionadas en los últimos 5 años',
+  'workspace.suggestReportFor': 'Genera un informe de antecedentes de {entity}',
 
   // Status labels
   'status.idle': 'Lista',

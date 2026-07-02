@@ -27,6 +27,15 @@ export interface Messages {
   reasoningReport: string;
   reasoningQa: string;
 
+  // Listing intent (planner + data agent)
+  taskListingTitle: string;
+  taskListingInstruction: string;
+  reasoningListing: string;
+  listingQuestion: (p: { count: number; range?: string }) => string;
+  listingEmptyRange: (range: string) => string;
+  listingCapped: (shown: number) => string;
+  listingSummary: (count: number) => string;
+
   // Data agent
   disambiguateSummary: string;
   clarifyQuestion: (count: number) => string;
@@ -120,6 +129,19 @@ const es: Messages = {
   reasoningQa:
     'La consulta requiere historial de cumplimiento: combino datos públicos de OEFA con los documentos del corpus para responder con citas.',
 
+  taskListingTitle: 'Listar administrados sancionados',
+  taskListingInstruction: 'Consultar los registros del período y listar los administrados sancionados.',
+  reasoningListing:
+    'La consulta pide un listado de administrados sancionados: consulto los registros públicos de OEFA y muestro las entidades encontradas para que elijas cuál investigar.',
+  listingQuestion: ({ count, range }) =>
+    range
+      ? `Encontré ${count} administrado(s) con sanciones en ${range}. ¿Cuál deseas investigar?`
+      : `Encontré ${count} administrado(s) con sanciones registradas. ¿Cuál deseas investigar?`,
+  listingEmptyRange: (range) =>
+    `No encontré sanciones registradas en ${range}; te muestro todas las entidades con sanciones.`,
+  listingCapped: (shown) => `Muestro las ${shown} con más registros.`,
+  listingSummary: (count) => `${count} administrado(s) sancionado(s) encontrados; se requiere elegir uno.`,
+
   disambiguateSummary: 'Se requiere desambiguar el administrado.',
   clarifyQuestion: (count) => `Encontré ${count} administrados similares. ¿Cuál?`,
   candidateNote: (count) => `${count} registro(s)`,
@@ -209,6 +231,19 @@ const en: Messages = {
     'The query asks for a report: I gather data and documents, draft the report, and request your approval before saving it.',
   reasoningQa:
     'The query needs a compliance history: I combine OEFA public data with the corpus documents to answer with citations.',
+
+  taskListingTitle: 'List sanctioned regulated entities',
+  taskListingInstruction: 'Query the period’s records and list the sanctioned regulated entities.',
+  reasoningListing:
+    'The query asks for a listing of sanctioned regulated entities: I query the OEFA public records and show the entities found so you can pick which one to investigate.',
+  listingQuestion: ({ count, range }) =>
+    range
+      ? `I found ${count} regulated entit${count === 1 ? 'y' : 'ies'} with sanctions in ${range}. Which one do you want to investigate?`
+      : `I found ${count} regulated entit${count === 1 ? 'y' : 'ies'} with recorded sanctions. Which one do you want to investigate?`,
+  listingEmptyRange: (range) =>
+    `I found no sanctions recorded in ${range}; here are all entities with sanctions.`,
+  listingCapped: (shown) => `Showing the ${shown} with the most records.`,
+  listingSummary: (count) => `${count} sanctioned entit${count === 1 ? 'y' : 'ies'} found; one must be selected.`,
 
   disambiguateSummary: 'The regulated entity must be disambiguated.',
   clarifyQuestion: (count) => `I found ${count} similar regulated entities. Which one?`,
