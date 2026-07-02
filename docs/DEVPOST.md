@@ -127,3 +127,17 @@ DASHSCOPE_API_KEY, and run docker compose up --build again.
 - OSS client: `apps/api/src/services/storage/oss-client.ts`
 - Deploy runbook (ECS): `docs/DEPLOY.md` §6 Option D
 - Architecture diagram: `docs/files/architecture.png` · gallery cover: `docs/files/cover.png`
+
+## Gallery images (upload in this order)
+
+All captured from the **live Alibaba ECS deploy** with real Qwen, English UI
+(`docs/files/screenshots/`):
+
+1. `cover.png` — architecture (set as the thumbnail)
+2. `03-listing-clickable-entities-en.png` — discovery: clickable sanctioned-entity listing
+3. `04-cited-answer-charts-suggestions-en.png` — cited answer + charts + next-step suggestion chips
+4. `06-report-draft-hitl-approval-en.png` — report draft + HITL approval gate
+5. `07-approved-report-exports-en.png` — approved report with PDF/DOCX/XLSX export
+6. `08-traceability-ledger-en.png` — the trace: qwen-plus model calls (tokens, latency) + tool calls
+7. `05-evidence-drawer-en.png` — evidence drawer with translated citation + "show original"
+8. `02-new-investigation-starters-en.png`, `01-dashboard-en.png` — entry points (optional)
