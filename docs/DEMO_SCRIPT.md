@@ -1,8 +1,8 @@
 # Demo script (~3 minutes)
 
 A tight, scene-by-scene walkthrough for the hackathon demo video. Every scene
-runs **today in offline mode** (zero keys); the *Live* notes say what changes once
-Qwen + Alibaba Cloud are wired (see [`DEPLOY.md`](DEPLOY.md)). Total target: **3:00**.
+runs **offline** (zero keys) and **live** on the deployed Alibaba Cloud instance
+(see [`DEPLOY.md`](DEPLOY.md) §6–7; record against the live URL). Total target: **3:00**.
 
 **Setup (before recording):**
 
@@ -29,9 +29,19 @@ For the *live* recording, run the backend with the env from `DEPLOY.md` so
 
 ---
 
-### Scene 2 — Flow B: grounded Q&A with citations (0:20–1:00)
+### Scene 2 — Discovery + Flow B: grounded Q&A with citations (0:20–1:10)
 
-**Do:** open a session, ask
+**Do (discovery beat, ~15 s):** open a session, click the starter
+*"Lístame las entidades sancionadas en los últimos 5 años"*. The agent answers
+with a **clickable listing** — every sanctioned entity as a candidate card
+(name, RUC, sector, record count; deterministic, so it streams fast). Click
+**Minera Las Bambas S.A.** — the run resumes into a cited answer for that
+entity.
+
+> "You don't need to know a RUC to start — ask for a listing, click an entity,
+> and the agent takes it from there."
+
+**Do (grounded Q&A beat):** in a new session, ask
 *"Antecedentes del administrado con RUC 20543210981"*.
 
 **Show, as it streams:**
@@ -41,6 +51,8 @@ For the *live* recording, run the backend with the env from `DEPLOY.md` so
 - the **Result** with **evidence chips** — click one to open the **evidence
   drawer** (the exact OEFA record / passage behind the claim).
 
+*(If time is tight, record both beats and trim the streaming waits in the edit.)*
+
 > "Every claim carries a citation. The orchestrator enforces this — an
 > **evidence guardrail** rejects any result that asserts without backing."
 
@@ -49,7 +61,7 @@ real OEFA Junar API.
 
 ---
 
-### Scene 3 — Agent-driven canvas (1:00–1:25)
+### Scene 3 — Agent-driven canvas (1:10–1:30)
 
 **Show:** the agent's `uiActions` drive the **canvas** — it auto-opens the
 **Datos OEFA** tab and renders charts (a **Recharts** sanctions-by-year bar chart
@@ -60,9 +72,12 @@ plus a custom segmented status-distribution bar and a procedural timeline).
 
 ---
 
-### Scene 4 — Flow A: report + HITL approval (1:25–2:15)
+### Scene 4 — Flow A: report + HITL approval (1:30–2:20)
 
-**Do:** ask *"Genera un informe de antecedentes del RUC 20543210981"*.
+**Do:** after Scene 2/3 settles, **suggestion chips** appear above the composer —
+state-aware next steps (deterministic, localized). Click
+*"Genera un informe de antecedentes de Minera Las Bambas S.A."*
+(or type *"Genera un informe de antecedentes del RUC 20543210981"*).
 
 **Show:**
 - a structured **report draft** appears in the **Informe** tab (carátula, resumen
@@ -82,7 +97,7 @@ the file once and stores it in **OSS** (served from there on later downloads).
 
 ---
 
-### Scene 5 — Trazabilidad: the AgentOps debugger (2:15–2:45)
+### Scene 5 — Trazabilidad: the AgentOps debugger (2:20–2:45)
 
 **Do:** click **Trazabilidad**.
 
@@ -113,6 +128,7 @@ bucket (`reports/<id>/informe.pdf`). Flash the proof files: `qwen-provider.ts`,
 
 | Definition-of-done step | Scene |
 | --- | --- |
+| Discover entities (listing → click → cycle) | 2 |
 | Ask an entity → backend hits OEFA | 2 |
 | Qwen call (live) | 2 (live) |
 | Use docs → retrieve context (RAG) | 2 |

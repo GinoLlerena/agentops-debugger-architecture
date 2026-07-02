@@ -6,18 +6,25 @@
 
 ## Status
 
-🚧 In development — runs **end-to-end offline today** (zero keys).
+✅ Feature-complete — runs **end-to-end offline** (zero keys) and **live on
+Alibaba Cloud ECS** with real Qwen (both flows validated against the deployed
+instance).
 
 - **Phase 0** — scaffold + shared zod contracts ✅
 - **Phase 1** — backend service foundations ✅ (Qwen provider, OEFA Junar client + normalizer + tools, storage ports with in-memory ⇄ Tablestore/OSS, RAG chunker + hybrid retriever, offline seed data)
 - **Phase 2** — orchestration core ✅ (manifest-driven routing, the Coordinator engine with evidence guardrail + HITL suspend/resume + MAX_TASK_STEPS, and the Mastra specialist agents + planner over Qwen)
 - **Phase 3** — API + persistence + first vertical slice ✅ (Hono server: streaming `/agent/*` with the typed event envelope, REST + `/trace/:sessionId`, durable suspend/resume, **Flow B grounded Q&A end-to-end**)
 - **Phase 4** — frontend workspace ✅ (React/Vite + TanStack Router/Query + Tailwind: the Workspace chat + canvas, evidence chips + drawer, the Trazabilidad trace sheet, and the dashboard — bound to the streaming `/agent/*` + REST)
-- **Phase 5** — reports, visualizations & compliance 🚧
+- **Phase 5** — reports, visualizations & compliance ✅
   - **5A** agent-driven Recharts visualizations via typed `uiActions` ✅
   - **5B** Flow A — report generation + HITL approval + report view ✅
   - **5C** report export to PDF / DOCX / XLSX (approved reports persisted to / served from OSS) ✅
-  - **5D** compliance — [architecture diagram](docs/ARCHITECTURE.md), [Alibaba Cloud deploy checklist](docs/DEPLOY.md), [demo script](docs/DEMO_SCRIPT.md) ✅ *(credentialed deploy + demo recording pending)*
+  - **5D** compliance — [architecture diagram](docs/ARCHITECTURE.md), [Alibaba Cloud deploy checklist](docs/DEPLOY.md), [demo script](docs/DEMO_SCRIPT.md) ✅
+  - **5E–5F** durable OEFA cache, session rehydration on reopen, live-mode chart/record artifacts ✅
+  - **5G** multilingual UI + narrative (ES/EN, translated citations with "show original") ✅
+- **Hardening** — demo access gate, per-IP rate limit, structured logging with redaction, `llm_call`/`tool_called` trace instrumentation, deep health endpoint ✅
+- **Discovery UX** — listing intent (*"lístame las entidades sancionadas este año"* → clickable entity list that resumes the investigation cycle) + state-aware next-step suggestions above the composer ✅
+- **Deployed** — single Docker container (API + SPA) on Alibaba Cloud ECS, live-validated with real Qwen ✅ *(demo video recording pending)*
 
 ### Run the web app (against the offline API)
 
