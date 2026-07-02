@@ -8,6 +8,8 @@ interface Handlers {
   onOpenEvidence: (item: EvidenceItem) => void;
   onResume: (r: Resumption) => void;
   busy: boolean;
+  /** True while the session is suspended on an interrupt (status 'waiting'). */
+  waiting: boolean;
 }
 
 export function ChatThread({
@@ -17,16 +19,36 @@ export function ChatThread({
   messages: ChatMessage[];
   handlers: Handlers;
 }) {
+  // Only the LATEST interrupt card is actionable, and only while the session is
+  // still waiting on it. A consumed card stays visible as history but inert —
+  // re-clicking an old Approve after the run settled would fire a resume against
+  // a lifted interrupt and paint a succeeded session as failed.
+  const lastInterruptId = [...messages]
+    .reverse()
+    .find((m) => m.kind === 'clarification' || m.kind === 'approval')?.id;
   return (
     <div className="flex flex-col gap-3">
       {messages.map((m) => (
-        <Message key={m.id} message={m} handlers={handlers} />
+        <Message
+          key={m.id}
+          message={m}
+          handlers={handlers}
+          interactive={handlers.waiting && m.id === lastInterruptId}
+        />
       ))}
     </div>
   );
 }
 
-function Message({ message, handlers }: { message: ChatMessage; handlers: Handlers }) {
+function Message({
+  message,
+  handlers,
+  interactive,
+}: {
+  message: ChatMessage;
+  handlers: Handlers;
+  interactive: boolean;
+}) {
   const { t } = useI18n();
   switch (message.kind) {
     case 'user':
@@ -49,7 +71,7 @@ function Message({ message, handlers }: { message: ChatMessage; handlers: Handle
               {message.candidates.map((c) => (
                 <button
                   key={c.id}
-                  disabled={handlers.busy}
+                  disabled={handlers.busy || !interactive}
                   onClick={() => handlers.onResume({ type: 'clarification', answer: c.ruc ?? c.label })}
                   className="rounded-card border border-linea bg-superficie px-3 py-1.5 text-left text-sm hover:bg-papel disabled:opacity-50"
                 >
@@ -74,13 +96,13 @@ function Message({ message, handlers }: { message: ChatMessage; handlers: Handle
             <div className="flex gap-2">
               <Button
                 variant="primary"
-                disabled={handlers.busy}
+                disabled={handlers.busy || !interactive}
                 onClick={() => handlers.onResume({ type: 'approval', approved: true })}
               >
                 {t('chat.approve')}
               </Button>
               <Button
-                disabled={handlers.busy}
+                disabled={handlers.busy || !interactive}
                 onClick={() => handlers.onResume({ type: 'approval', approved: false })}
               >
                 {t('chat.cancel')}
@@ -122,12 +144,22 @@ function Message({ message, handlers }: { message: ChatMessage; handlers: Handle
           {message.text}
         </div>
       );
-    case 'error':
+    case 'error': {
+      // Client-synthesized stream errors carry a code; translate those to the
+      // active language (the raw message is a hardcoded fallback). Server error
+      // frames pass through as-is.
+      const text =
+        message.code === 'no_body'
+          ? t('chat.errNoBody')
+          : message.code === 'network'
+            ? t('chat.errNetwork')
+            : message.message;
       return (
         <div className="rounded-card border-l-2 border-rojo bg-[#FDF0EF] px-3 py-2 text-sm text-rojo">
-          {message.message}
+          {text}
         </div>
       );
+    }
   }
 }
 

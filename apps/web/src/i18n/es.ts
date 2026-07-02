@@ -66,6 +66,8 @@ export const es = {
   'chat.planCount': '{settled} de {total}',
   'chat.ariaErrors': 'con errores',
   'chat.ariaDone': 'completado',
+  'chat.errNoBody': 'Respuesta sin cuerpo.',
+  'chat.errNetwork': 'Error de red. Revisa tu conexión e inténtalo de nuevo.',
 
   // Evidence
   'evidence.title': 'Evidencia',

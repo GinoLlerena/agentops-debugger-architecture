@@ -5,7 +5,8 @@ import type { ChatMessage } from '../lib/agent-stream.js';
 import { I18nProvider } from '../i18n/index.js';
 import { ChatThread } from './chat-messages.js';
 
-const noop = { onOpenEvidence: vi.fn(), onResume: vi.fn(), busy: false };
+// waiting: true because most cases exercise an actionable HITL card.
+const noop = { onOpenEvidence: vi.fn(), onResume: vi.fn(), busy: false, waiting: true };
 
 /** Components use `useI18n`, so every render needs the provider (defaults to es). */
 const renderUI = (ui: ReactElement) => render(<I18nProvider>{ui}</I18nProvider>);
@@ -72,5 +73,46 @@ describe('ChatThread', () => {
     renderUI(<ChatThread messages={messages} handlers={{ ...noop, onResume }} />);
     fireEvent.click(screen.getByText('Aprobar y guardar informe'));
     expect(onResume).toHaveBeenCalledWith({ type: 'approval', approved: true });
+  });
+
+  it('a consumed approval card is inert once the session is no longer waiting', () => {
+    const onResume = vi.fn();
+    const messages: ChatMessage[] = [
+      { id: 'a1', kind: 'approval', interruptId: 'i1', description: 'Guardar informe' },
+      { id: 'r1', kind: 'result', text: 'Informe guardado.', evidence: [] },
+    ];
+    renderUI(<ChatThread messages={messages} handlers={{ ...noop, onResume, waiting: false }} />);
+    const approve = screen.getByText('Aprobar y guardar informe');
+    expect(approve).toBeDisabled();
+    fireEvent.click(approve);
+    expect(onResume).not.toHaveBeenCalled();
+  });
+
+  it('only the latest interrupt card is actionable while waiting', () => {
+    const onResume = vi.fn();
+    const messages: ChatMessage[] = [
+      {
+        id: 'c1',
+        kind: 'clarification',
+        question: '¿Cuál?',
+        candidates: [{ id: 'x', label: 'Antigua' }],
+      },
+      { id: 'a1', kind: 'approval', interruptId: 'i2', description: 'Guardar informe' },
+    ];
+    renderUI(<ChatThread messages={messages} handlers={{ ...noop, onResume }} />);
+    // the older clarification is inert; the newest approval is live
+    fireEvent.click(screen.getByText('Antigua'));
+    expect(onResume).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText('Aprobar y guardar informe'));
+    expect(onResume).toHaveBeenCalledWith({ type: 'approval', approved: true });
+  });
+
+  it('translates coded stream errors to the active language', () => {
+    const messages: ChatMessage[] = [
+      { id: 'e1', kind: 'error', message: 'Error de red', code: 'network' },
+    ];
+    renderUI(<ChatThread messages={messages} handlers={noop} />);
+    // default provider language is es
+    expect(screen.getByText(/Error de red\. Revisa tu conexión/)).toBeInTheDocument();
   });
 });
