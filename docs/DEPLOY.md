@@ -354,11 +354,63 @@ Checklist:
 - [ ] `/health/deep` reports every configured service `ok` (and `?llm=1` proves
       a real Qwen generation).
 - [ ] `/health` reports `mode: "live"`.
+- [ ] The browser acceptance walkthrough (§7.1) passes end to end.
 - [ ] A fresh `sessionId` appears in `/sessions` **after a process restart**
       (confirms Tablestore, not in-memory).
 - [ ] `/trace/:id` returns the ledger for a run.
 - [ ] An approved report exports to PDF/DOCX/XLSX, and the object appears in the
       OSS bucket under `reports/<reportId>/informe.<fmt>`.
+
+### 7.1 Browser acceptance walkthrough (manual UI test)
+
+The curl smoke above proves the API; this proves the product. Run it against
+`$HOST` in a browser after every deploy — several past bugs (structured-output
+variance, HITL card staleness) only ever showed up here, never in unit tests.
+
+**0. Unlock** — if `DEMO_ACCESS_TOKEN` is set, open
+`$HOST/unlock?token=<value>` once. *Expect:* redirect to the dashboard.
+(Without it, the app loads but every query fails with 401 — the gate working.)
+
+**1. Shell** — *Expect:* green dot + "modo live" in the top bar; in the nav
+rail only Panel is clickable — OEFA/Documentos/Reports are dimmed inert
+placeholders (planned sections, no routes).
+
+**2. Flow B (cited answer)** — new session, ask
+`Antecedentes del administrado con RUC 20543210981`. *Expect, in order:* Plan
+card with reasoning → plan morphs into a live checklist (○→◌→✔) → Resumen card
+with a formal answer + evidence chips (E1, E2…) → charts in the canvas Datos
+tab. Takes ~30–60 s (real model calls). While it runs, scroll up — *expect* the
+view to stay put (auto-scroll only engages near the bottom). Click an evidence
+chip — *expect* the drawer with document title, passage, confidence.
+
+**3. Trazabilidad** — open the trace sheet. *Expect:* the full ledger including
+`llm_call` entries (model, token counts, latency) and `tool_called` entries
+(oefa.*/rag.*) with agent attribution — the live-Qwen proof judges look for.
+
+**4. Flow A (report + HITL)** — ask
+`Genera un informe del administrado con RUC 20543210981`. *Expect:* an
+"Aprobación requerida" card (composer disabled). Click *Aprobar y guardar
+informe* — *expect* the save task to run, the Informe tab to open with the
+mandatory disclaimer + cited findings. Afterwards the approval card's buttons
+must be **permanently disabled** (a consumed card is history, not a control).
+Export PDF — *expect* a valid file.
+
+**5. Clarification** — ask `sanciones de bambas`. *Expect:* a clarification
+card with 2 candidates instead of a guess; clicking one resumes and completes.
+(Live-model caveat: the model occasionally resolves the ambiguity itself and
+answers directly — acceptable, just note it.)
+
+**6. Rehydration** — hard-refresh the session URL. *Expect:* conversation,
+evidence and charts restored, not a blank page. The dashboard lists the session.
+
+**7. Language** — switch ES→EN in the top bar. *Expect:* full UI flip; an
+English question gets an English answer; translated citations offer
+"show original".
+
+Known limitations to not misread as failures: a second question in the *same*
+session overwrites the previous turn's trace (use one question per session for
+recordings); with Stage-1 env (Qwen only) deep health reports
+Tablestore/OSS/OEFA as `skipped`.
 
 ---
 
