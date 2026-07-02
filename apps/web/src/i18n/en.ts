@@ -62,6 +62,8 @@ export const en: Record<MessageKey, string> = {
   'chat.planCount': '{settled} of {total}',
   'chat.ariaErrors': 'with errors',
   'chat.ariaDone': 'completed',
+  'chat.errNoBody': 'Empty response body.',
+  'chat.errNetwork': 'Network error. Check your connection and try again.',
 
   // Evidence
   'evidence.title': 'Evidence',

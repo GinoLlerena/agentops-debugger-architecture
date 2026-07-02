@@ -7,8 +7,14 @@ import { useI18n, type MessageKey } from '../i18n/index.js';
 
 const NAV: { to: string; labelKey: MessageKey; icon: typeof LayoutDashboard }[] = [
   { to: '/', labelKey: 'nav.panel', icon: LayoutDashboard },
-  { to: '/oefa', labelKey: 'nav.oefa', icon: Search },
-  { to: '/documentos', labelKey: 'nav.documentos', icon: Library },
+];
+
+// Sections that don't exist yet (no routes registered) — rendered as inert
+// placeholders like the Reports icon below, not as links that would land on a
+// blank Not Found page.
+const NAV_PLANNED: { labelKey: MessageKey; icon: typeof LayoutDashboard }[] = [
+  { labelKey: 'nav.oefa', icon: Search },
+  { labelKey: 'nav.documentos', icon: Library },
 ];
 
 /** Language toggle (ES/EN) — global app preference, persisted by the provider. */
@@ -49,6 +55,15 @@ export function AppShell({ children }: { children: ReactNode }) {
           >
             <Icon size={18} strokeWidth={1.5} />
           </Link>
+        ))}
+        {NAV_PLANNED.map(({ labelKey, icon: Icon }) => (
+          <div
+            key={labelKey}
+            className="flex h-10 w-10 items-center justify-center text-white/40"
+            title={t(labelKey)}
+          >
+            <Icon size={18} strokeWidth={1.5} />
+          </div>
         ))}
         <div className="mt-auto flex h-10 w-10 items-center justify-center text-white/40" title={t('app.reports')}>
           <FileText size={18} strokeWidth={1.5} />

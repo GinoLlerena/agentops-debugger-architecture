@@ -36,7 +36,13 @@ export function Workspace({ sessionId }: { sessionId: string }) {
   const composerDisabled = busy || awaitingApproval || hydrating; // approvals must use the buttons
 
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+    const el = scrollRef.current;
+    if (!el) return;
+    // Only auto-scroll when the user is already near the bottom — task_progress
+    // patches arrive constantly during a run, and force-scrolling would yank the
+    // view away from someone re-reading the plan.
+    const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+    if (nearBottom) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
   }, [state.messages]);
 
   const submit = () => {
@@ -86,7 +92,12 @@ export function Workspace({ sessionId }: { sessionId: string }) {
             ) : (
               <ChatThread
                 messages={state.messages}
-                handlers={{ onOpenEvidence: setEvidence, onResume: resume, busy }}
+                handlers={{
+                  onOpenEvidence: setEvidence,
+                  onResume: resume,
+                  busy,
+                  waiting: state.status === 'waiting',
+                }}
               />
             )}
           </div>

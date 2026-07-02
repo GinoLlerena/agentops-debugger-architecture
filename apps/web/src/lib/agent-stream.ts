@@ -44,7 +44,7 @@ export type ChatMessage =
     }
   | { id: string; kind: 'approval'; interruptId: string; description: string; reportPreviewId?: string }
   | { id: string; kind: 'notice'; text: string }
-  | { id: string; kind: 'error'; message: string };
+  | { id: string; kind: 'error'; message: string; code?: string };
 
 export interface ChatState {
   sessionId?: string;
@@ -265,7 +265,7 @@ export function reduceEvent(state: ChatState, event: StreamEvent): ChatState {
         status: 'failed',
         messages: [
           ...state.messages,
-          { id: nextId(), kind: 'error', message: event.payload.message },
+          { id: nextId(), kind: 'error', message: event.payload.message, code: event.payload.code },
         ],
       };
     case 'done':
