@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Agent } from '@mastra/core/agent';
 import { OefaRecord, type DomainTaskPacket, type OrchestratorState } from '@agentops/shared';
-import { toLiveDataAgent, type AgentOutput } from './specialists.js';
+import { AgentOutputSchema, resolveSummary, toLiveDataAgent, type AgentOutput } from './specialists.js';
 import { InMemoryOefaCache } from '../../services/oefa/oefa-cache.js';
 import { OefaService, SeedRecordSource } from '../../services/oefa/oefa-service.js';
 import type { AgentRunContext } from '../coordinator/types.js';
@@ -132,5 +132,132 @@ describe('toLiveDataAgent — narrative + deterministic artifacts', () => {
     expect(result.status).toBe('needs_user_input');
     expect(result.artifacts).toHaveLength(0);
     expect(result.clarification?.question).toBe('¿Cuál?');
+  });
+});
+
+/**
+ * Live-model output variance (observed with qwen-plus on the deployed instance):
+ * the model returns status synonyms outside the enum and sometimes omits the
+ * summary. The schema must absorb that variance instead of failing the task.
+ */
+describe('AgentOutputSchema — tolerant to live-model variance', () => {
+  it.each([
+    ['success', 'completed'],
+    ['SUCCESS', 'completed'],
+    ['done', 'completed'],
+    ['completed', 'completed'],
+    ['error', 'failed'],
+    ['failure', 'failed'],
+    ['failed', 'failed'],
+    ['clarification', 'needs_user_input'],
+    ['needs_user_input', 'needs_user_input'],
+  ])('coerces status %j → %j', (raw, expected) => {
+    const out = AgentOutputSchema.parse({ status: raw, summary: 's' });
+    expect(out.status).toBe(expected);
+  });
+
+  it('defaults an unrecognized status to completed (single-shot answer is final)', () => {
+    expect(AgentOutputSchema.parse({ status: 'in_progress', summary: 's' }).status).toBe('completed');
+    expect(AgentOutputSchema.parse({ summary: 's' }).status).toBe('completed');
+  });
+
+  it('accepts a missing summary (resolved after parsing)', () => {
+    const out = AgentOutputSchema.parse({ status: 'success' });
+    expect(out.summary).toBeUndefined();
+  });
+});
+
+describe('resolveSummary', () => {
+  const finding = {
+    id: 'f1',
+    statement: 'Hallazgo citado.',
+    evidenceIds: [],
+    confidence: 'directa' as const,
+  };
+
+  it('prefers the model summary', () => {
+    const out = AgentOutputSchema.parse({ summary: 'Resumen del modelo.', findings: [finding] });
+    expect(resolveSummary(out, 'es')).toBe('Resumen del modelo.');
+  });
+
+  it('falls back to the first finding statement', () => {
+    const out = AgentOutputSchema.parse({ findings: [finding] });
+    expect(resolveSummary(out, 'es')).toBe('Hallazgo citado.');
+  });
+
+  it('falls back to a neutral localized line when there is nothing else', () => {
+    const out = AgentOutputSchema.parse({});
+    expect(resolveSummary(out, 'es')).toBe('Tarea completada (sin resumen).');
+    expect(resolveSummary(out, 'en')).toBe('Task completed (no summary provided).');
+  });
+
+  it('treats a whitespace-only summary as missing', () => {
+    const out = AgentOutputSchema.parse({ summary: '   ', findings: [finding] });
+    expect(resolveSummary(out, 'es')).toBe('Hallazgo citado.');
+  });
+});
+
+describe('AgentOutputSchema — tolerant evidence (live variance)', () => {
+  const good = {
+    id: 'OEFA:a1',
+    documentTitle: 'RUIAS — Resoluciones firmes',
+    passage: 'Multa de 300 UIT (2023).',
+    confidence: 'directa',
+  };
+
+  it('keeps valid items and drops malformed ones instead of failing the task', () => {
+    const out = AgentOutputSchema.parse({
+      summary: 's',
+      evidence: [good, { id: 'E2' /* missing documentTitle/passage/confidence */ }],
+    });
+    expect(out.evidence).toHaveLength(1);
+    expect(out.evidence[0]!.id).toBe('OEFA:a1');
+  });
+
+  it('maps common field aliases (title/text) onto the contract', () => {
+    const out = AgentOutputSchema.parse({
+      summary: 's',
+      evidence: [{ id: 'E1', title: 'Informe de supervisión', text: 'Pasaje citado.', confidence: 'direct' }],
+    });
+    expect(out.evidence).toHaveLength(1);
+    expect(out.evidence[0]!.documentTitle).toBe('Informe de supervisión');
+    expect(out.evidence[0]!.passage).toBe('Pasaje citado.');
+    expect(out.evidence[0]!.confidence).toBe('directa');
+  });
+
+  it('coerces English confidence labels in findings', () => {
+    const out = AgentOutputSchema.parse({
+      summary: 's',
+      findings: [{ id: 'f1', statement: 'x', confidence: 'inference' }],
+    });
+    expect(out.findings[0]!.confidence).toBe('inferencia');
+  });
+
+  it('an empty/absent evidence array still parses', () => {
+    expect(AgentOutputSchema.parse({ summary: 's' }).evidence).toEqual([]);
+  });
+});
+
+describe('AgentOutputSchema — tolerant findings (live variance)', () => {
+  it('drops findings that still lack a statement, keeps the rest', () => {
+    const out = AgentOutputSchema.parse({
+      summary: 's',
+      findings: [
+        { id: 'f1', statement: 'Multa firme de 300 UIT.', confidence: 'directa' },
+        { id: 'f2', confidence: 'directa' }, // no statement under any alias
+      ],
+    });
+    expect(out.findings).toHaveLength(1);
+  });
+
+  it('maps statement aliases and fills id/confidence', () => {
+    const out = AgentOutputSchema.parse({
+      summary: 's',
+      findings: [{ text: 'Hallazgo con otro nombre de campo.' }],
+    });
+    expect(out.findings).toHaveLength(1);
+    expect(out.findings[0]!.statement).toBe('Hallazgo con otro nombre de campo.');
+    expect(out.findings[0]!.id).toBe('f1');
+    expect(out.findings[0]!.confidence).toBe('sin_evidencia'); // weakest label when absent
   });
 });

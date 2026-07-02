@@ -19,6 +19,68 @@ const PlanOutputSchema = z.object({
   clarification: ClarificationRequest.optional(),
   text: z.string().optional(),
 });
+export type PlanOutput = z.infer<typeof PlanOutputSchema>;
+
+/**
+ * Map raw planner output onto a {@link PlanResult}. Pure and exported for tests.
+ * `degenerate` marks an answer with no usable content (no tasks, no
+ * clarification, no reply text) — observed live when the model nests its plan
+ * under an unexpected key. The caller should retry once on degenerate output
+ * rather than surface a misleading canned reply.
+ */
+export function interpretPlanOutput(
+  out: PlanOutput,
+  idgen: () => string,
+  language: 'es' | 'en',
+): { result: PlanResult; degenerate: boolean } {
+  // Assign task ids ourselves (the coordinator keys ledger/approval state on
+  // them); the model only supplies domain/operation/title/instruction.
+  const tasks = (out.tasks ?? []).map((t) => ({ ...t, taskId: idgen() }));
+  // A save (report_admin/create) without a draft (report/create) can never
+  // succeed — the ReportManager persists an existing draft. Observed live:
+  // the planner schedules the save alone, the user approves, and the run ends
+  // with "no draft to save". Insert the draft task rather than fail post-approval.
+  const saveIdx = tasks.findIndex((t) => t.domain === 'report_admin' && t.operation === 'create');
+  const hasDraft = tasks.some((t) => t.domain === 'report' && t.operation === 'create');
+  if (saveIdx >= 0 && !hasDraft) {
+    tasks.splice(saveIdx, 0, {
+      taskId: idgen(),
+      domain: 'report',
+      operation: 'create',
+      title: language === 'en' ? 'Draft the report' : 'Elaborar borrador de informe',
+      instruction:
+        language === 'en'
+          ? 'Assemble the draft report from the retrieved records and cited evidence.'
+          : 'Elaborar el borrador del informe a partir de los registros recuperados y la evidencia citada.',
+      inputs: {},
+      dependsOn: [],
+    });
+  }
+  // Infer the discriminator when the model omits it: a clarification object
+  // wins, then any tasks → plan, else a direct reply.
+  const kind = out.kind ?? (out.clarification ? 'clarification' : tasks.length > 0 ? 'plan' : 'reply');
+  if (kind === 'clarification' && out.clarification) {
+    return { result: { kind: 'clarification', clarification: out.clarification }, degenerate: false };
+  }
+  if (kind === 'plan' && tasks.length > 0) {
+    return { result: { kind: 'plan', reasoning: out.reasoning ?? '', tasks }, degenerate: false };
+  }
+  // Reply path (explicit, inferred, or a "plan" with zero tasks): honest text
+  // only — prefer the model's reply, then its reasoning; the canned fallback
+  // must not claim sources were consulted when nothing ran.
+  const text = out.text?.trim() || out.reasoning?.trim();
+  return {
+    result: {
+      kind: 'reply',
+      text:
+        text ??
+        (language === 'en'
+          ? 'I could not derive a plan for this query. Please rephrase it.'
+          : 'No pude derivar un plan para esta consulta. Por favor, reformúlala.'),
+    },
+    degenerate: !text,
+  };
+}
 
 /** A one-line summary of the routable domain+operation pairs, injected into the prompt. */
 function manifestSummary(): string {
@@ -45,34 +107,29 @@ export function createQwenPlanner(
 
   return {
     async plan({ request }): Promise<PlanResult> {
-      const start = Date.now();
-      let res;
-      try {
-        res = await agent.generate(`${languageDirective(request.language)}\n\n${request.text}`, {
-          structuredOutput: { schema: PlanOutputSchema },
+      const prompt = `${languageDirective(request.language)}\n\n${request.text}`;
+      // Up to 2 attempts: degenerate output (no tasks/clarification/text) is
+      // model variance, not a property of the query — one retry usually lands.
+      let last: { result: PlanResult; degenerate: boolean } | undefined;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const start = Date.now();
+        let res;
+        try {
+          res = await agent.generate(prompt, {
+            structuredOutput: { schema: PlanOutputSchema },
+          });
+        } catch (err) {
+          recordLlmCall('planner', Date.now() - start, false, { model: qwen.plannerModelId });
+          throw err;
+        }
+        recordLlmCall('planner', Date.now() - start, true, {
+          model: qwen.plannerModelId,
+          usage: (res as { usage?: unknown }).usage,
         });
-      } catch (err) {
-        recordLlmCall('planner', Date.now() - start, false, { model: qwen.plannerModelId });
-        throw err;
+        last = interpretPlanOutput(res.object as PlanOutput, idgen, request.language);
+        if (!last.degenerate) return last.result;
       }
-      recordLlmCall('planner', Date.now() - start, true, {
-        model: qwen.plannerModelId,
-        usage: (res as { usage?: unknown }).usage,
-      });
-      const out = res.object as z.infer<typeof PlanOutputSchema>;
-      // Assign task ids ourselves (the coordinator keys ledger/approval state on
-      // them); the model only supplies domain/operation/title/instruction.
-      const tasks = (out.tasks ?? []).map((t) => ({ ...t, taskId: idgen() }));
-      // Infer the discriminator when the model omits it: a clarification object
-      // wins, then any tasks → plan, else a direct reply.
-      const kind = out.kind ?? (out.clarification ? 'clarification' : tasks.length > 0 ? 'plan' : 'reply');
-      if (kind === 'clarification' && out.clarification) {
-        return { kind: 'clarification', clarification: out.clarification };
-      }
-      if (kind === 'reply') {
-        return { kind: 'reply', text: out.text ?? 'No encontré evidencia en las fuentes consultadas.' };
-      }
-      return { kind: 'plan', reasoning: out.reasoning ?? '', tasks };
+      return last!.result;
     },
   };
 }
