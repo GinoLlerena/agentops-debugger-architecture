@@ -3,14 +3,13 @@ import type {
   DomainTaskResult,
   EvidenceItem,
   Finding,
-  OefaRecord,
 } from '@agentops/shared';
 import type { OefaService } from '../../services/oefa/oefa-service.js';
 import type { RagService } from '../../services/rag/index.js';
 import type { ReportStore } from '../../persistence/report-store.js';
 import { createOfflineReportAgent, createOfflineReportManager } from './offline-report-agents.js';
 import { foldAccents } from '../../services/util/text.js';
-import { buildDataArtifacts, entityQueryFor } from '../data-artifacts.js';
+import { buildDataArtifacts, entityQueryFor, recordToEvidence } from '../data-artifacts.js';
 import { detectListingIntent, runListingTask } from '../listing.js';
 import { messages } from '../../i18n/messages.js';
 import { NoopTranslator, translateQuery, type Translator } from '../../services/translation/index.js';
@@ -113,21 +112,6 @@ export function createOfflinePlanner(clock: () => Date = () => new Date()): Plan
   };
 }
 
-function recordToEvidence(r: OefaRecord): EvidenceItem {
-  const amount = r.fineAmountUit != null ? ` (${r.fineAmountUit} UIT)` : '';
-  return {
-    id: `OEFA:${r.id}`,
-    documentTitle: r.resolucionMulta ?? r.resolucionDirectoral ?? `Registro OEFA ${r.id}`,
-    resolutionNumber: r.resolucionMulta ?? r.resolucionDirectoral,
-    date: r.actoAdministrativoDate,
-    passage:
-      `${r.administrado}: ${r.hechosImputados ?? 'registro administrativo'} — ` +
-      `${r.sanctionType ?? 'medida'}${amount}. Estado: ${r.resolutionStatus}.`,
-    confidence: 'directa',
-    producedByAgentId: AGENT_IDS.data,
-  };
-}
-
 /** Offline DataAgent: resolves the entity over seed records; clarifies if ambiguous. */
 export function createOfflineDataAgent(
   oefa: OefaService,
@@ -184,7 +168,7 @@ export function createOfflineDataAgent(
       }
 
       const { entity, records, stats } = profile.profile;
-      const evidence = records.slice(0, 5).map(recordToEvidence);
+      const evidence = records.slice(0, 5).map((r) => recordToEvidence(r, AGENT_IDS.data));
       const findings: Finding[] = [
         {
           id: 'F-data',

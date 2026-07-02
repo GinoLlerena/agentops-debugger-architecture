@@ -134,6 +134,47 @@ describe('toLiveDataAgent — narrative + deterministic artifacts', () => {
     expect(result.clarification?.question).toBe('¿Cuál?');
   });
 
+  it('never re-asks an answered clarification — resolves the clicked entity deterministically', async () => {
+    // Observed live (qwen-plus, English): on resume the model loops and returns
+    // needs_user_input again for the entity the user just picked. The clarified
+    // path must complete from the records regardless of the model's mood.
+    const looping: AgentOutput = {
+      status: 'needs_user_input',
+      summary: "The provided RUC requires resolution to identify the administrado.",
+      findings: [],
+      evidence: [],
+      clarification: { question: 'Which entity?', candidates: [{ id: 'x', label: 'X' }] },
+    };
+    const agent = toLiveDataAgent(fakeAgent(looping), oefaService());
+    const result = await agent.run(
+      task({ query: 'List the sanctioned entities', clarificationAnswer: '20543210981' }),
+      ctx('List the sanctioned entities'),
+    );
+    expect(result.status).toBe('completed');
+    expect(result.clarification).toBeUndefined();
+    expect(result.summary).toContain('Minera Las Bambas');
+    expect(result.evidence.length).toBeGreaterThan(0);
+    expect(result.evidence[0]!.id).toMatch(/^OEFA:/);
+    expect(result.artifacts.some((a) => a.kind === 'record_set')).toBe(true);
+    expect(result.artifacts.some((a) => a.kind === 'chart_data')).toBe(true);
+  });
+
+  it('passes a non-completed result through when the clarified entity does not resolve', async () => {
+    const failing: AgentOutput = {
+      status: 'failed',
+      summary: 'x',
+      findings: [],
+      evidence: [],
+    };
+    const agent = toLiveDataAgent(fakeAgent(failing), oefaService());
+    const result = await agent.run(
+      task({ clarificationAnswer: '99999999999' }), // unknown RUC → not_found
+      ctx('sanciones'),
+    );
+    expect(result.status).toBe('failed');
+    expect(result.artifacts).toHaveLength(0);
+  });
+
   it('answers a listing query deterministically — the LLM is never called', async () => {
     const explodingAgent = {
       generate: async () => {

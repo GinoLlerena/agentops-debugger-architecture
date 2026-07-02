@@ -14,8 +14,9 @@ import { createOefaTools } from '../../services/oefa/tools.js';
 import type { OefaService } from '../../services/oefa/oefa-service.js';
 import { createRagTools, type RagService } from '../../services/rag/index.js';
 import type { ReportStore } from '../../persistence/report-store.js';
-import { buildDataArtifacts, entityQueryFor } from '../data-artifacts.js';
+import { buildDataArtifacts, entityQueryFor, recordToEvidence } from '../data-artifacts.js';
 import { detectListingIntent, runListingTask } from '../listing.js';
+import { messages } from '../../i18n/messages.js';
 import {
   createOfflineReportAgent,
   createOfflineReportManager,
@@ -282,8 +283,56 @@ export function toLiveDataAgent(
       }
       const result = await narrator.run(task, ctx);
       // Only attach artifacts for a resolved answer — a clarification or failure
-      // has no entity to chart yet.
-      if (result.status !== 'completed') return result;
+      // has no entity to chart yet. EXCEPT when the user already answered a
+      // clarification: from there the resolution is deterministic, and a live
+      // model occasionally loops — returns needs_user_input again for the very
+      // entity the user just picked (observed with qwen-plus in English on the
+      // deployed instance). Never re-ask an answered question: resolve the
+      // clarified entity from the records and answer like the offline agent.
+      if (result.status !== 'completed') {
+        if (!clarified) return result;
+        const base = await oefa.getRecords();
+        const profile = await oefa.getCompanyProfile(clarified);
+        if (profile.status !== 'ok') return result;
+        const m = messages(ctx.state.language);
+        const { entity, records, stats } = profile.profile;
+        const evidence = records.slice(0, 5).map((r) => recordToEvidence(r, AGENT_IDS.data));
+        return {
+          ...result,
+          status: 'completed',
+          clarification: undefined,
+          summary: m.dataSummary({
+            total: stats.totalRecords,
+            administrado: entity.administrado,
+            firm: stats.firmCount,
+          }),
+          evidence,
+          findings: [
+            {
+              id: 'F-data',
+              statement: m.dataFinding({
+                administrado: entity.administrado,
+                total: stats.totalRecords,
+                firm: stats.firmCount,
+                uit: stats.sumFineUit,
+                reincidencia: stats.reincidencia,
+              }),
+              evidenceIds: evidence.map((e) => e.id),
+              confidence: 'directa',
+            },
+          ],
+          artifacts: buildDataArtifacts({
+            entity,
+            records,
+            stats,
+            source: `API OEFA · ${base.datasetId}`,
+            coverage: base.coverage,
+            asOf: base.fetchedAt,
+            producedByAgentId: AGENT_IDS.data,
+            language: ctx.state.language,
+          }),
+        };
+      }
       // Inbound edge: the entity heuristic matches over the Spanish corpus, so a
       // non-Spanish query is translated first (a clarification answer is verbatim).
       const query = clarified ?? (await translateQuery(rawQuery, ctx.state.language, translator));

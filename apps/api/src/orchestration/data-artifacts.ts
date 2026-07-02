@@ -1,4 +1,4 @@
-import type { ArtifactRecord, Language, OefaRecord } from '@agentops/shared';
+import type { ArtifactRecord, EvidenceItem, Language, OefaRecord } from '@agentops/shared';
 import type { CompanyStats } from '../services/oefa/oefa-service.js';
 import { buildOefaCharts } from '../services/charts/oefa-charts.js';
 import { foldAccents } from '../services/util/text.js';
@@ -30,6 +30,24 @@ export function entityQueryFor(question: string, records: OefaRecord[]): string 
     .filter((t) => nameTokens.has(t))
     .sort((a, b) => b.length - a.length);
   return candidates[0] ?? question;
+}
+
+/** Deterministic citation for an OEFA record — the id format (`OEFA:<recordId>`)
+ *  is the contract the evidence drawer and trace rely on. Shared by the offline
+ *  Data agent and the live agent's deterministic fallback. */
+export function recordToEvidence(r: OefaRecord, producedByAgentId: string): EvidenceItem {
+  const amount = r.fineAmountUit != null ? ` (${r.fineAmountUit} UIT)` : '';
+  return {
+    id: `OEFA:${r.id}`,
+    documentTitle: r.resolucionMulta ?? r.resolucionDirectoral ?? `Registro OEFA ${r.id}`,
+    resolutionNumber: r.resolucionMulta ?? r.resolucionDirectoral,
+    date: r.actoAdministrativoDate,
+    passage:
+      `${r.administrado}: ${r.hechosImputados ?? 'registro administrativo'} — ` +
+      `${r.sanctionType ?? 'medida'}${amount}. Estado: ${r.resolutionStatus}.`,
+    confidence: 'directa',
+    producedByAgentId,
+  };
 }
 
 /** Build the `record_set` + `chart_data` artifacts for a resolved administrado. */
