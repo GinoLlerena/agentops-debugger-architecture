@@ -119,7 +119,9 @@ describe('toLiveDataAgent — narrative + deterministic artifacts', () => {
     expect(recordSet.id).toBe('records:20543210981');
   });
 
-  it('does not attach artifacts for a clarification result', async () => {
+  it('overrides a model clarification when the query actually resolves uniquely', async () => {
+    // Live variance: the model claims ambiguity for a query the records resolve
+    // (observed on the deployed instance with the report-suggestion query).
     const clarifying: AgentOutput = {
       status: 'needs_user_input',
       summary: 'Se requiere desambiguar.',
@@ -129,9 +131,43 @@ describe('toLiveDataAgent — narrative + deterministic artifacts', () => {
     };
     const agent = toLiveDataAgent(fakeAgent(clarifying), oefaService());
     const result = await agent.run(task({ query: 'RUC 20543210981' }), ctx('bambas'));
+    expect(result.status).toBe('completed');
+    expect(result.clarification).toBeUndefined();
+    expect(result.artifacts.some((a) => a.kind === 'record_set')).toBe(true);
+  });
+
+  it('replaces a model clarification with deterministic candidates when genuinely ambiguous', async () => {
+    const clarifying: AgentOutput = {
+      status: 'needs_user_input',
+      summary: 'Ambiguous.',
+      findings: [],
+      evidence: [],
+      // The model's own candidates may be junk (or missing) — never trust them.
+      clarification: { question: 'Which?', candidates: [{ id: 'x', label: 'X' }] },
+    };
+    const agent = toLiveDataAgent(fakeAgent(clarifying), oefaService());
+    const result = await agent.run(task({ query: 'sanciones de bambas' }), ctx('sanciones de bambas'));
     expect(result.status).toBe('needs_user_input');
-    expect(result.artifacts).toHaveLength(0);
+    expect(result.clarification!.candidates.map((c) => c.label).sort()).toEqual([
+      'Minera Bambas Servicios S.A.C.',
+      'Minera Las Bambas S.A.',
+    ]);
+    expect(result.clarification!.candidates[0]!.ruc).toBeDefined();
+  });
+
+  it('passes a clarification through when the query resolves to nothing', async () => {
+    const clarifying: AgentOutput = {
+      status: 'needs_user_input',
+      summary: 'Se requiere aclarar.',
+      findings: [],
+      evidence: [],
+      clarification: { question: '¿Cuál?', candidates: [{ id: 'a', label: 'A' }] },
+    };
+    const agent = toLiveDataAgent(fakeAgent(clarifying), oefaService());
+    const result = await agent.run(task({ query: 'empresa desconocida xyz' }), ctx('empresa desconocida xyz'));
+    expect(result.status).toBe('needs_user_input');
     expect(result.clarification?.question).toBe('¿Cuál?');
+    expect(result.artifacts).toHaveLength(0);
   });
 
   it('never re-asks an answered clarification — resolves the clicked entity deterministically', async () => {

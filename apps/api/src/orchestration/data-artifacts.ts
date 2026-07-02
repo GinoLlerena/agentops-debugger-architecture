@@ -18,13 +18,24 @@ function clean(text: string): string[] {
 }
 
 /** Pick an entity query from a free-text question: an 11-digit RUC wins (only if it
- *  matches a known record); else the longest query token present in some administrado name. */
+ *  matches a known record); else a full administrado name contained in the question;
+ *  else the longest query token present in some administrado name. */
 export function entityQueryFor(question: string, records: OefaRecord[]): string {
   // Only treat an 11-digit run as a RUC if it actually matches a known record —
   // otherwise a stray document id / number would shadow a company name present
   // in the same question.
   const ruc = question.match(/\b\d{11}\b/);
   if (ruc && records.some((r) => r.ruc === ruc[0])) return ruc[0];
+  // A full company name in the question (e.g. from a suggestion chip: "Generate a
+  // background report for Minera Las Bambas S.A.") resolves that entity uniquely —
+  // single tokens like "bambas" would be ambiguous across similarly-named ones.
+  // Longest name first so a name that contains another name wins.
+  const q = foldAccents(question);
+  const names = [...new Set(records.map((r) => r.administrado))].sort(
+    (a, b) => b.length - a.length,
+  );
+  const named = names.find((n) => q.includes(foldAccents(n)));
+  if (named) return named;
   const nameTokens = new Set(records.flatMap((r) => clean(r.administrado)));
   const candidates = clean(question)
     .filter((t) => nameTokens.has(t))

@@ -28,6 +28,15 @@ describe('entityQueryFor', () => {
     expect(entityQueryFor('expediente 99999999999 bambas', RECORDS)).toBe('bambas');
   });
 
+  it('resolves a full administrado name contained in the question (e.g. a suggestion chip)', () => {
+    expect(entityQueryFor('Generate a background report for Minera Las Bambas S.A.', RECORDS)).toBe(
+      'Minera Las Bambas S.A.',
+    );
+    expect(
+      entityQueryFor('Genera un informe de antecedentes de Minera Las Bambas S.A.', RECORDS),
+    ).toBe('Minera Las Bambas S.A.');
+  });
+
   it('picks the longest query token present in an administrado name', () => {
     expect(entityQueryFor('historial servicios bambas', RECORDS)).toBe('servicios');
   });
