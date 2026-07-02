@@ -35,6 +35,7 @@ testable with zero keys.
 ## Diagram
 
 Rendered image (for Devpost / quick viewing): [`files/architecture.png`](files/architecture.png)
+Stylized cover variant (Devpost gallery): [`files/cover.png`](files/cover.png) — editable source [`files/cover.svg`](files/cover.svg)
 
 ![Architecture diagram](files/architecture.png)
 
