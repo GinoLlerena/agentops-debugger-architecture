@@ -141,3 +141,10 @@ All captured from the **live Alibaba ECS deploy** with real Qwen, English UI
 6. `08-traceability-ledger-en.png` — the trace: qwen-plus model calls (tokens, latency) + tool calls
 7. `05-evidence-drawer-en.png` — evidence drawer with translated citation + "show original"
 8. `02-new-investigation-starters-en.png`, `01-dashboard-en.png` — entry points (optional)
+
+**"Proof of Alibaba Cloud deployment" field** (allows png/jpg/jpeg):
+upload `09-alibaba-ecs-console.png` — the ECS console with instance
+`agentops-demo` (i-t4n1w3s9onvpaterzson) **Running** in Singapore and public IP
+**47.237.18.240** (the same IP serving the app in the other screenshots).
+`10-alibaba-ecs-console-config.png` is a fuller configuration view if a second
+image fits. Paste the proof code-file links (above) in the same field's text.
