@@ -282,56 +282,77 @@ export function toLiveDataAgent(
         }
       }
       const result = await narrator.run(task, ctx);
-      // Only attach artifacts for a resolved answer — a clarification or failure
-      // has no entity to chart yet. EXCEPT when the user already answered a
-      // clarification: from there the resolution is deterministic, and a live
-      // model occasionally loops — returns needs_user_input again for the very
-      // entity the user just picked (observed with qwen-plus in English on the
-      // deployed instance). Never re-ask an answered question: resolve the
-      // clarified entity from the records and answer like the offline agent.
+      // Deterministic backstop for a non-completed narrative (live variance,
+      // observed with qwen-plus on the deployed instance): the model sometimes
+      // claims ambiguity for a query that resolves uniquely, re-asks a
+      // clarification the user already answered, or returns needs_user_input
+      // without usable candidates (which dead-ends the turn). The entity
+      // resolution is deterministic over the records, so verify:
+      //   resolves → answer like the offline agent (summary/finding/evidence/artifacts);
+      //   genuinely ambiguous (and unanswered) → a candidates card that always works;
+      //   otherwise → the narrator's result stands.
       if (result.status !== 'completed') {
-        if (!clarified) return result;
+        if (result.status === 'failed' && !clarified) return result;
         const base = await oefa.getRecords();
-        const profile = await oefa.getCompanyProfile(clarified);
-        if (profile.status !== 'ok') return result;
+        const entityQuery = clarified ?? entityQueryFor(rawQuery, base.records);
+        const profile = await oefa.getCompanyProfile(entityQuery);
         const m = messages(ctx.state.language);
-        const { entity, records, stats } = profile.profile;
-        const evidence = records.slice(0, 5).map((r) => recordToEvidence(r, AGENT_IDS.data));
-        return {
-          ...result,
-          status: 'completed',
-          clarification: undefined,
-          summary: m.dataSummary({
-            total: stats.totalRecords,
-            administrado: entity.administrado,
-            firm: stats.firmCount,
-          }),
-          evidence,
-          findings: [
-            {
-              id: 'F-data',
-              statement: m.dataFinding({
-                administrado: entity.administrado,
-                total: stats.totalRecords,
-                firm: stats.firmCount,
-                uit: stats.sumFineUit,
-                reincidencia: stats.reincidencia,
-              }),
-              evidenceIds: evidence.map((e) => e.id),
-              confidence: 'directa',
+        if (profile.status === 'ok') {
+          const { entity, records, stats } = profile.profile;
+          const evidence = records.slice(0, 5).map((r) => recordToEvidence(r, AGENT_IDS.data));
+          return {
+            ...result,
+            status: 'completed',
+            clarification: undefined,
+            summary: m.dataSummary({
+              total: stats.totalRecords,
+              administrado: entity.administrado,
+              firm: stats.firmCount,
+            }),
+            evidence,
+            findings: [
+              {
+                id: 'F-data',
+                statement: m.dataFinding({
+                  administrado: entity.administrado,
+                  total: stats.totalRecords,
+                  firm: stats.firmCount,
+                  uit: stats.sumFineUit,
+                  reincidencia: stats.reincidencia,
+                }),
+                evidenceIds: evidence.map((e) => e.id),
+                confidence: 'directa',
+              },
+            ],
+            artifacts: buildDataArtifacts({
+              entity,
+              records,
+              stats,
+              source: `API OEFA · ${base.datasetId}`,
+              coverage: base.coverage,
+              asOf: base.fetchedAt,
+              producedByAgentId: AGENT_IDS.data,
+              language: ctx.state.language,
+            }),
+          };
+        }
+        if (profile.status === 'ambiguous' && result.status === 'needs_user_input' && !clarified) {
+          return {
+            ...result,
+            summary: m.disambiguateSummary,
+            clarification: {
+              question: m.clarifyQuestion(profile.candidates.length),
+              candidates: profile.candidates.map((c) => ({
+                id: c.ruc ?? c.administrado,
+                label: c.administrado,
+                ruc: c.ruc,
+                sector: c.sector,
+                note: m.candidateNote(c.recordCount),
+              })),
             },
-          ],
-          artifacts: buildDataArtifacts({
-            entity,
-            records,
-            stats,
-            source: `API OEFA · ${base.datasetId}`,
-            coverage: base.coverage,
-            asOf: base.fetchedAt,
-            producedByAgentId: AGENT_IDS.data,
-            language: ctx.state.language,
-          }),
-        };
+          };
+        }
+        return result;
       }
       // Inbound edge: the entity heuristic matches over the Spanish corpus, so a
       // non-Spanish query is translated first (a clarification answer is verbatim).
