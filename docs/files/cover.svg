@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#475569"/>
+    </marker>
+  </defs>
+  <rect width="1600" height="900" fill="white"/>
+
+  <text x="800" y="42" text-anchor="middle" font-size="27" font-weight="bold" fill="#111827">AgentOps Debugger — OEFA Environmental Compliance (Qwen Cloud / Alibaba Cloud)</text>
+
+  <!-- FRONTEND zone -->
+  <rect x="380" y="68" width="640" height="130" rx="14" fill="#dbeafe" stroke="#60a5fa" stroke-width="1.5"/>
+  <text x="700" y="94" text-anchor="middle" font-size="17" font-weight="bold" fill="#1e3a8a">FRONTEND — React/Vite · TanStack · Tailwind · Recharts</text>
+  <rect x="402" y="110" width="288" height="46" rx="8" fill="white" stroke="#64748b"/>
+  <text x="546" y="138" text-anchor="middle" font-size="15" fill="#1f2937"><tspan font-weight="bold">Chat</tspan> — typed SSE client</text>
+  <rect x="710" y="110" width="288" height="46" rx="8" fill="white" stroke="#64748b"/>
+  <text x="854" y="138" text-anchor="middle" font-size="15" fill="#1f2937">Canvas · Dashboard · Report view</text>
+
+  <!-- BACKEND zone -->
+  <rect x="330" y="255" width="740" height="340" rx="14" fill="#dcfce7" stroke="#4ade80" stroke-width="1.5"/>
+  <text x="700" y="281" text-anchor="middle" font-size="17" font-weight="bold" fill="#14532d">BACKEND — Node/TypeScript (Hono)</text>
+  <rect x="355" y="294" width="690" height="44" rx="8" fill="white" stroke="#64748b"/>
+  <text x="700" y="321" text-anchor="middle" font-size="15" fill="#1f2937"><tspan font-weight="bold">HTTP:</tspan> /agent/* (SSE stream) + REST /oefa /rag /reports /sessions /trace</text>
+
+  <rect x="355" y="352" width="690" height="150" rx="10" fill="#d1fae5" stroke="#34d399"/>
+  <text x="470" y="374" text-anchor="middle" font-size="15" font-weight="bold" fill="#065f46">Mastra Orchestration</text>
+  <rect x="375" y="384" width="650" height="52" rx="8" fill="white" stroke="#64748b"/>
+  <text x="700" y="405" text-anchor="middle" font-size="14.5" fill="#1f2937"><tspan font-weight="bold">Coordinator Engine</tspan> — ingest → plan → [route → run → apply]* → finalize</text>
+  <text x="700" y="425" text-anchor="middle" font-size="14.5" fill="#1f2937">evidence guardrail · HITL approval gate · audit ledger · manifest routing</text>
+  <rect x="375" y="446" width="650" height="44" rx="8" fill="white" stroke="#64748b"/>
+  <text x="700" y="473" text-anchor="middle" font-size="14.5" fill="#1f2937"><tspan font-weight="bold">Specialist Agents</tspan> — Data Agent · Docs Agent (RAG) · Report Agent · Report Manager</text>
+
+  <rect x="355" y="518" width="690" height="44" rx="8" fill="white" stroke="#64748b"/>
+  <text x="700" y="545" text-anchor="middle" font-size="15" fill="#1f2937"><tspan font-weight="bold">Tools</tspan> — OEFA client · RAG retriever · report builder · session/report stores</text>
+
+  <!-- QWEN zone -->
+  <rect x="70" y="660" width="430" height="140" rx="14" fill="#f3e8ff" stroke="#c084fc" stroke-width="1.5"/>
+  <text x="285" y="686" text-anchor="middle" font-size="16" font-weight="bold" fill="#581c87">QWEN CLOUD — DashScope (OpenAI-compatible)</text>
+  <rect x="92" y="700" width="386" height="66" rx="8" fill="white" stroke="#64748b"/>
+  <text x="285" y="727" text-anchor="middle" font-size="15" fill="#1f2937"><tspan font-weight="bold">Qwen LLMs</tspan> — planner + specialist agents</text>
+  <text x="285" y="748" text-anchor="middle" font-size="14" fill="#374151">via Mastra / AI SDK v5</text>
+
+  <!-- EXTERNAL zone -->
+  <rect x="580" y="675" width="300" height="112" rx="14" fill="#f3f4f6" stroke="#9ca3af" stroke-width="1.5"/>
+  <text x="730" y="701" text-anchor="middle" font-size="16" font-weight="bold" fill="#374151">EXTERNAL</text>
+  <rect x="600" y="714" width="260" height="58" rx="8" fill="white" stroke="#64748b"/>
+  <text x="730" y="737" text-anchor="middle" font-size="15" fill="#1f2937"><tspan font-weight="bold">OEFA Datos Abiertos</tspan></text>
+  <text x="730" y="757" text-anchor="middle" font-size="14" fill="#374151">public open-data API (Junar)</text>
+
+  <!-- ALIBABA zone -->
+  <rect x="950" y="640" width="590" height="212" rx="14" fill="#ffedd5" stroke="#fb923c" stroke-width="1.5"/>
+  <text x="1245" y="666" text-anchor="middle" font-size="16" font-weight="bold" fill="#7c2d12">ALIBABA CLOUD</text>
+  <!-- Tablestore cylinder -->
+  <rect x="975" y="692" width="260" height="88" rx="6" fill="white" stroke="#64748b"/>
+  <ellipse cx="1105" cy="692" rx="130" ry="11" fill="white" stroke="#64748b"/>
+  <text x="1105" y="722" text-anchor="middle" font-size="14.5" fill="#1f2937"><tspan font-weight="bold">Tablestore</tspan> — agentops_kv</text>
+  <text x="1105" y="742" text-anchor="middle" font-size="13.5" fill="#374151">sessions · reports · ledger</text>
+  <text x="1105" y="760" text-anchor="middle" font-size="13.5" fill="#374151">snapshots · OEFA cache</text>
+  <!-- OSS cylinder -->
+  <rect x="1255" y="692" width="260" height="88" rx="6" fill="white" stroke="#64748b"/>
+  <ellipse cx="1385" cy="692" rx="130" ry="11" fill="white" stroke="#64748b"/>
+  <text x="1385" y="722" text-anchor="middle" font-size="14.5" fill="#1f2937"><tspan font-weight="bold">OSS</tspan> — report files</text>
+  <text x="1385" y="742" text-anchor="middle" font-size="13.5" fill="#374151">PDF / DOCX / XLSX</text>
+  <text x="1385" y="760" text-anchor="middle" font-size="13.5" fill="#374151">read-through cache</text>
+  <!-- ECS box -->
+  <rect x="975" y="796" width="540" height="40" rx="8" fill="white" stroke="#64748b"/>
+  <text x="1245" y="821" text-anchor="middle" font-size="15" fill="#1f2937"><tspan font-weight="bold">ECS</tspan> — Docker container (API + SPA)</text>
+
+  <!-- Arrows -->
+  <g stroke="#475569" stroke-width="1.7" fill="none">
+    <path d="M 546 160 V 290" marker-end="url(#arr)" marker-start="url(#arr)"/>
+    <path d="M 854 160 V 290" marker-end="url(#arr)"/>
+    <path d="M 700 338 V 380" marker-end="url(#arr)"/>
+    <path d="M 700 490 V 514" marker-end="url(#arr)"/>
+    <path d="M 430 595 L 300 656" marker-end="url(#arr)"/>
+    <path d="M 730 562 V 671" marker-end="url(#arr)"/>
+    <path d="M 1025 410 H 1105 V 677" marker-end="url(#arr)"/>
+    <path d="M 1045 316 H 1385 V 677" marker-end="url(#arr)"/>
+    <path d="M 1070 560 H 1560 V 816 H 1521" marker-end="url(#arr)" stroke-dasharray="7 5"/>
+  </g>
+
+  <!-- Arrow labels (white halo via paint-order) -->
+  <g font-size="13.5" fill="#111827" text-anchor="middle" paint-order="stroke" stroke="white" stroke-width="5" stroke-linejoin="round">
+    <text x="546" y="230">SSE events</text>
+    <text x="854" y="230">REST (TanStack Query)</text>
+    <text x="378" y="618">LLM calls</text>
+    <text x="730" y="628">OEFA records</text>
+    <text x="1105" y="620">durable state</text>
+    <text x="1105" y="637">(sessions · reports · ledger)</text>
+    <text x="1385" y="600">approved report files</text>
+    <text x="1300" y="550">deployed on</text>
+  </g>
+</svg>
