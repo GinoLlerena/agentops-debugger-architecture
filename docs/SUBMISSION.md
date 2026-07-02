@@ -24,10 +24,10 @@ this repo that satisfies it. Track: **Track 3 — Agent Society**.
 | 2 | **Proof of Alibaba Cloud deployment** — *code file link demonstrating use of Alibaba services/APIs* | ✅ in repo | Link these files in the submission: `qwen-provider.ts`, `apps/api/src/services/storage/tablestore-client.ts`, `apps/api/src/services/storage/oss-client.ts`. Plus a screenshot/clip of the backend running on Alibaba (ECS/FC console). |
 | 3 | **Demo video < 3 min** (YouTube/Vimeo/Youku) | ⬜ to record | Script ready in `docs/DEMO_SCRIPT.md`. Record against the deployed URL; upload; paste link in the Devpost form. |
 | 4 | **Public code repo + OSI license** with build instructions | ✅ in repo | Public GitHub repo; `LICENSE` (MIT); `README.md` + `docs/DEPLOY.md` for build/run. |
-| 5 | **Text description** of features/functionality | ✅ / polish | `README.md` (front-end overview, offline-first, agent flows). Paste/adapt into the Devpost description. |
-| 6 | **Architecture diagram** | ✅ in repo | `docs/ARCHITECTURE.md` (mermaid diagrams + the Alibaba/Qwen seams table). Export an image for the Devpost gallery. |
+| 5 | **Text description** of features/functionality | ✅ ready | Copy-paste source in [`DEVPOST.md`](./DEVPOST.md) (title, tagline, full "About the project", tags, testing instructions). |
+| 6 | **Architecture diagram** | ✅ exported | Official render: `docs/files/architecture.png` (labels match code). Stylized gallery cover: `docs/files/cover.png` (source `cover.svg`). |
 | 7 | **Track identification** | ⬜ select | Choose **Track 3 — Agent Society** in the submission form. |
-| 8 | **Project available for testing until judging ends (Jul 31)** | ⬜ choose path | **Recommended:** submit the **Docker test build** (image + `docker compose up` instructions in `DEPLOY.md`) — no hosting needed. *Optional:* a live URL kept reachable through Jul 31 (higher cost — see below). |
+| 8 | **Project available for testing until judging ends (Jul 31)** | ✅ path chosen | **Docker test build**: `docker compose up --build` → `http://localhost:8787`, zero keys (offline mode) — instructions in `README.md` + `DEPLOY.md`. Do **NOT** submit the ephemeral ECS IP as the try-it link (it changes on every stop/start and the instance is stopped after proof capture). |
 | 9 | *(Optional)* Blog/social post — Blog Post Prize | ⬜ optional | Publish a short write-up; add its URL to the submission for extra eligibility. |
 
 ## Worst-case cost (so there are no surprises)

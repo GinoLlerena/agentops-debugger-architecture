@@ -26,6 +26,13 @@ instance).
 - **Discovery UX** — listing intent (*"lístame las entidades sancionadas este año"* → clickable entity list that resumes the investigation cycle) + state-aware next-step suggestions above the composer ✅
 - **Deployed** — single Docker container (API + SPA) on Alibaba Cloud ECS, live-validated with real Qwen ✅ *(demo video recording pending)*
 
+### Run with Docker (one command, zero keys)
+
+```bash
+docker compose up --build   # → http://localhost:8787 (API + web app, offline mode)
+# live mode: put credentials in .env first (see .env.example) — compose loads it
+```
+
 ### Run the web app (against the offline API)
 
 ```bash
