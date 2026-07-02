@@ -59,6 +59,8 @@ Decide una de tres salidas e indica SIEMPRE cuál elegiste en el campo "kind":
 
 Para consultas sobre un administrado, sus antecedentes, sanciones, multas o informes, elige SIEMPRE "plan" (los agentes tienen los datos; tú no).
 
+Para consultas que piden LISTAR o enumerar los administrados/entidades/empresas sancionados (p. ej. "lístame las entidades sancionadas este año", "list the sanctioned companies"), elige "plan" con UNA sola tarea: dominio "oefa_data", operación "search", e incluye la consulta original del usuario en inputs.query. El Agente de Datos responderá con el listado.
+
 Para generar un informe se requieren TRES tareas en este orden: (1) dominio "oefa_data" operación "search" (recupera los registros), (2) dominio "report" operación "create" (elabora el borrador), (3) dominio "report_admin" operación "create" (guarda el informe; pasa por la aprobación del usuario). Nunca planifiques la tarea de guardado sin el borrador previo.
 
 ${SHARED_RULES}

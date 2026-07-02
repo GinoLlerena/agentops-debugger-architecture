@@ -133,6 +133,40 @@ describe('toLiveDataAgent — narrative + deterministic artifacts', () => {
     expect(result.artifacts).toHaveLength(0);
     expect(result.clarification?.question).toBe('¿Cuál?');
   });
+
+  it('answers a listing query deterministically — the LLM is never called', async () => {
+    const explodingAgent = {
+      generate: async () => {
+        throw new Error('the listing path must not invoke the model');
+      },
+    } as unknown as Agent;
+    const agent = toLiveDataAgent(
+      explodingAgent,
+      oefaService(),
+      undefined,
+      undefined,
+      () => new Date('2026-07-02T12:00:00Z'),
+    );
+    const result = await agent.run(
+      task({ query: 'Lístame las entidades sancionadas este año' }),
+      ctx('Lístame las entidades sancionadas este año'),
+    );
+    expect(result.status).toBe('needs_user_input');
+    // 2026 has no records → honest empty-range note + full entity fallback.
+    expect(result.clarification!.question).toContain('2026');
+    expect(result.clarification!.candidates.map((c) => c.label)).toContain('Minera Las Bambas S.A.');
+  });
+
+  it('routes a listing resume (clicked candidate) through the normal narrative flow', async () => {
+    const agent = toLiveDataAgent(fakeAgent(NARRATIVE), oefaService(), undefined, undefined, () => new Date('2026-07-02T12:00:00Z'));
+    const result = await agent.run(
+      task({ query: 'Lístame las entidades sancionadas', clarificationAnswer: '20543210981' }),
+      ctx('Lístame las entidades sancionadas'),
+    );
+    expect(result.status).toBe('completed');
+    const recordSet = result.artifacts.find((a) => a.kind === 'record_set')!;
+    expect(recordSet.id).toBe('records:20543210981');
+  });
 });
 
 /**

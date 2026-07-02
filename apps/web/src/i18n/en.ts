@@ -43,6 +43,8 @@ export const en: Record<MessageKey, string> = {
   'workspace.suggestion1': 'Generate a background report for RUC 20543210981',
   'workspace.suggestion2': 'Background of the regulated entity with RUC 20543210981',
   'workspace.suggestion3': 'What sanctions does bambas have?',
+  'workspace.suggestListing': 'List the sanctioned entities in the last 5 years',
+  'workspace.suggestReportFor': 'Generate a background report for {entity}',
 
   // Status labels
   'status.idle': 'Ready',

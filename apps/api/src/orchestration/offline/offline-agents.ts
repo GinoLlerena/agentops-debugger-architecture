@@ -11,6 +11,7 @@ import type { ReportStore } from '../../persistence/report-store.js';
 import { createOfflineReportAgent, createOfflineReportManager } from './offline-report-agents.js';
 import { foldAccents } from '../../services/util/text.js';
 import { buildDataArtifacts, entityQueryFor } from '../data-artifacts.js';
+import { detectListingIntent, runListingTask } from '../listing.js';
 import { messages } from '../../i18n/messages.js';
 import { NoopTranslator, translateQuery, type Translator } from '../../services/translation/index.js';
 import { AGENT_IDS } from '../manifests/registry.js';
@@ -33,14 +34,33 @@ function isReportIntent(query: string): boolean {
 }
 
 /** Heuristic planner: any query → resolve entity (data) + ground in docs (RAG);
- *  a report request additionally drafts the report and gates the save on HITL. */
-export function createOfflinePlanner(): Planner {
+ *  a report request additionally drafts the report and gates the save on HITL.
+ *  A listing query ("lístame las entidades sancionadas…") plans a single data
+ *  task — the Data agent answers it with a clickable entity list. */
+export function createOfflinePlanner(clock: () => Date = () => new Date()): Planner {
   return {
     async plan({ request }): Promise<PlanResult> {
       const m = messages(request.language);
       const query = request.text.trim();
       if (!query) {
         return { kind: 'reply', text: m.noEvidence };
+      }
+      if (detectListingIntent(query, clock())) {
+        return {
+          kind: 'plan',
+          reasoning: m.reasoningListing,
+          tasks: [
+            {
+              taskId: 'data',
+              domain: 'oefa_data',
+              operation: 'search',
+              title: m.taskListingTitle,
+              instruction: m.taskListingInstruction,
+              inputs: { query },
+              dependsOn: [],
+            },
+          ],
+        };
       }
       const tasks: DomainTaskPacket[] = [
         {
@@ -112,6 +132,7 @@ function recordToEvidence(r: OefaRecord): EvidenceItem {
 export function createOfflineDataAgent(
   oefa: OefaService,
   translator: Translator = new NoopTranslator(),
+  clock: () => Date = () => new Date(),
 ): SpecialistAgent {
   return {
     agentId: AGENT_IDS.data,
@@ -119,6 +140,22 @@ export function createOfflineDataAgent(
       const m = messages(ctx.state.language);
       const answer = task.inputs.clarificationAnswer as string | undefined;
       const rawQuery = answer ?? (task.inputs.query as string | undefined) ?? task.instruction;
+      // A listing question lists the entities as clickable candidates instead of
+      // resolving one; a clarification answer means the user already picked, so
+      // the normal entity flow takes over on resume. Detection runs on the raw
+      // query (the patterns are bilingual — no translation round-trip needed).
+      if (!answer) {
+        const intent = detectListingIntent(rawQuery, clock());
+        if (intent) {
+          return runListingTask({
+            task,
+            agentId: AGENT_IDS.data,
+            oefa,
+            intent,
+            language: ctx.state.language,
+          });
+        }
+      }
       // Inbound edge: a free-text query in another language is translated to
       // Spanish for retrieval/entity resolution; a clarification answer is an
       // entity the user already picked, so it's used verbatim.
@@ -261,7 +298,7 @@ export function createOfflineAgents(deps: {
   const clock = deps.clock ?? (() => new Date());
   const translator = deps.translator ?? new NoopTranslator();
   return {
-    [AGENT_IDS.data]: createOfflineDataAgent(deps.oefa, translator),
+    [AGENT_IDS.data]: createOfflineDataAgent(deps.oefa, translator, clock),
     [AGENT_IDS.docs]: createOfflineDocsAgent(deps.rag, translator),
     [AGENT_IDS.report]: createOfflineReportAgent(deps.reportStore, idgen, clock),
     [AGENT_IDS.reportManager]: createOfflineReportManager(deps.reportStore),

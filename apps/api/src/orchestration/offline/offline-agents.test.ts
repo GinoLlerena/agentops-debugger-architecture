@@ -130,3 +130,43 @@ describe('offline data agent — localized narrative', () => {
     expect(result.findings[0]!.statement).toContain('Minera Las Bambas');
   });
 });
+
+describe('listing intent — the clickable entity list cycle', () => {
+  const NOW = () => new Date('2026-07-02T12:00:00Z');
+
+  function service() {
+    return new OefaService(new SeedRecordSource(SEED), new InMemoryOefaCache());
+  }
+
+  it('planner: a listing query plans a single data task with the listing title', async () => {
+    const plan = await createOfflinePlanner(NOW).plan({
+      request: req('Lístame las entidades sancionadas este año', 'es'),
+      state: {} as OrchestratorState,
+    });
+    expect(plan.kind).toBe('plan');
+    if (plan.kind !== 'plan') return;
+    expect(plan.tasks).toHaveLength(1);
+    expect(plan.tasks[0]!.domain).toBe('oefa_data');
+    expect(plan.tasks[0]!.title).toBe('Listar administrados sancionados');
+    expect(plan.reasoning).toContain('listado');
+  });
+
+  it('data agent: a listing query returns the entities as clarification candidates', async () => {
+    const task = { ...dataTask, inputs: { query: 'Lístame las entidades sancionadas' } };
+    const result = await createOfflineDataAgent(service(), undefined, NOW).run(task, ctx('es'));
+    expect(result.status).toBe('needs_user_input');
+    expect(result.clarification!.candidates[0]!.label).toBe('Minera Las Bambas S.A.');
+    expect(result.clarification!.candidates[0]!.ruc).toBe('20543210981');
+  });
+
+  it('data agent: clicking a candidate (resume) runs the normal entity cycle, not the listing', async () => {
+    const task = {
+      ...dataTask,
+      inputs: { query: 'Lístame las entidades sancionadas', clarificationAnswer: '20543210981' },
+    };
+    const result = await createOfflineDataAgent(service(), undefined, NOW).run(task, ctx('es'));
+    expect(result.status).toBe('completed');
+    expect(result.findings[0]!.statement).toContain('Minera Las Bambas');
+    expect(result.artifacts.some((a) => a.kind === 'record_set')).toBe(true);
+  });
+});
