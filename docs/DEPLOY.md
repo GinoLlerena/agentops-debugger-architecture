@@ -411,6 +411,19 @@ card with 2 candidates instead of a guess; clicking one resumes and completes.
 (Live-model caveat: the model occasionally resolves the ambiguity itself and
 answers directly — acceptable, just note it.)
 
+**5b. Listing → click → cycle** — new session, click the starter
+`Lístame las entidades sancionadas en los últimos 5 años` (or type it).
+*Expect:* a single-task plan → an Aclaración card listing the sanctioned
+entities as clickable buttons (name, RUC, sector, record count), most-sanctioned
+first. Click one — *expect* the normal cited-answer cycle for that entity
+(step 2). This path is deterministic (no LLM in the listing itself). Then
+*expect* **suggestion chips above the composer**: "Genera un informe de
+antecedentes de <the entity>" + the listing query. Click the report chip —
+*expect* the full Flow A (step 4) for that entity. A year with no data (e.g.
+"este año" beyond the dataset coverage) must show an honest
+"No encontré sanciones registradas en <año>" note and fall back to all
+entities, never a dead end.
+
 **6. Rehydration** — hard-refresh the session URL. *Expect:* conversation,
 evidence and charts restored, not a blank page. The dashboard lists the session.
 
