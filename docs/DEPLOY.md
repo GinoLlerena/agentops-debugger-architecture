@@ -282,6 +282,17 @@ ssh -i ~/.ssh/agentops_ecs root@$IP "docker rm -f agentops && docker load \
   < /root/agentops-image.tar.gz && docker run -d --name agentops \
   --restart unless-stopped -p 8787:8787 --env-file /root/app.env \
   agentops-debugger:latest"
+
+# Toggle the demo gate on a running instance (e.g. disable it for judging).
+# GOTCHA: --env-file is read at container CREATION — `docker restart` does NOT
+# pick up app.env edits. Always rm -f + docker run again:
+ssh -i ~/.ssh/agentops_ecs root@$IP \
+  "sed -i '/^DEMO_ACCESS_TOKEN=/d' /root/app.env \
+   && docker rm -f agentops \
+   && docker run -d --name agentops --restart unless-stopped \
+        -p 8787:8787 --env-file /root/app.env agentops-debugger:latest \
+   && sleep 4 && curl -s http://localhost:8787/health"
+# (Re-enable by appending DEMO_ACCESS_TOKEN=<value> to app.env + same swap.)
 ```
 
 **Teardown (§9) — stop billing the moment proof is captured:**
@@ -476,13 +487,18 @@ RATE_LIMIT_PER_MIN=60
 BODY_LIMIT_BYTES=32768
 ```
 
-Give the demo token to judges in the Devpost "testing instructions" field as the
-full unlock link.
+**Judging mode:** for the hackathon demo the gate is intentionally **left off**
+(`DEMO_ACCESS_TOKEN` unset) so judges can open the URL with zero friction — the
+rate limit and body limit stay on, and the deploy is short-lived (started for
+review, stopped after). Re-enable the token for any longer-lived exposure. The
+gate code stays in place either way; unset var = pass-through (§6 shows the
+swap command to toggle it on a running instance).
 
 - [ ] Real keys live only in the compute env / secrets manager — **never** in
       git. `.env.example` ships placeholders only; `.env` is gitignored.
-- [ ] On a public URL: `DEMO_ACCESS_TOKEN` and `RATE_LIMIT_PER_MIN` are set (see
-      above), and the unlock link is recorded for the demo/judges.
+- [ ] On a public URL: `RATE_LIMIT_PER_MIN` is set (see above). Set
+      `DEMO_ACCESS_TOKEN` too unless the deploy is a short-lived judging
+      window — if set, record the unlock link for the demo/judges.
 - [ ] Use a **RAM** user with least-privilege policies, not the root AccessKey.
 - [ ] `auth_key` is never logged or placed in URLs (the Junar client redacts it).
 - [ ] Keep the OSS bucket private — objects are written and read back by the app
