@@ -32,23 +32,106 @@ import { NoopTranslator, translateQuery, type Translator } from '../../services/
  * (the real OEFA/RAG work) happen inside `agent.generate`; their results inform
  * this summary and the cited evidence.
  */
-const AgentOutputSchema = z.object({
-  status: z.enum(['completed', 'failed', 'needs_user_input']).default('completed'),
-  summary: z.string(),
-  findings: z
-    .array(
-      z.object({
-        id: z.string(),
-        statement: z.string(),
-        evidenceIds: z.array(z.string()).default([]),
-        confidence: ConfidenceLabel,
-      }),
-    )
-    .default([]),
-  evidence: z.array(EvidenceItem).default([]),
+/** Live models improvise status labels ("success", "done", "error") despite the
+ *  schema — observed with qwen-plus on the deployed instance. Coerce the common
+ *  synonyms instead of failing the whole task on a label mismatch; anything
+ *  unrecognized falls through to the default ('completed' — the generate call is
+ *  single-shot, so whatever the model returned IS its final answer). */
+const TolerantStatus = z.preprocess((v) => {
+  if (typeof v !== 'string') return v;
+  const s = v.toLowerCase().trim();
+  if (['completed', 'complete', 'success', 'succeeded', 'ok', 'done'].includes(s)) return 'completed';
+  if (['failed', 'failure', 'error'].includes(s)) return 'failed';
+  if (['needs_user_input', 'needs_input', 'clarification', 'clarification_required'].includes(s)) {
+    return 'needs_user_input';
+  }
+  return undefined;
+}, z.enum(['completed', 'failed', 'needs_user_input']).default('completed'));
+
+/** Spanish contract enum ← the English/loose labels live models actually emit. */
+const TolerantConfidence = z.preprocess((v) => {
+  if (typeof v !== 'string') return v;
+  const s = v.toLowerCase().trim();
+  if (['directa', 'direct', 'high', 'alta'].includes(s)) return 'directa';
+  if (['inferencia', 'inference', 'inferred', 'indirect', 'medium', 'media'].includes(s)) {
+    return 'inferencia';
+  }
+  if (['sin_evidencia', 'no_evidence', 'none', 'low', 'baja'].includes(s)) return 'sin_evidencia';
+  return v;
+}, ConfidenceLabel);
+
+/** Map the field aliases models use onto the EvidenceItem contract; leave
+ *  everything else for the schema to judge. */
+function coerceEvidenceShape(raw: unknown): unknown {
+  if (typeof raw !== 'object' || raw === null) return raw;
+  const e = raw as Record<string, unknown>;
+  return {
+    ...e,
+    documentTitle: e.documentTitle ?? e.title ?? e.documentName ?? e.source ?? e.document,
+    passage: e.passage ?? e.text ?? e.snippet ?? e.quote ?? e.excerpt ?? e.content,
+    confidence: TolerantConfidence.safeParse(e.confidence).success
+      ? TolerantConfidence.parse(e.confidence)
+      : e.confidence,
+  };
+}
+
+/** Salvage what validates and DROP what doesn't, instead of failing the whole
+ *  task on one malformed citation (observed live: qwen-plus omits
+ *  documentTitle/passage on some items). Uncited findings are already
+ *  downgraded by the coordinator's evidence guardrail, so dropping is safe. */
+const TolerantEvidenceList = z.preprocess((v) => {
+  if (!Array.isArray(v)) return v;
+  return v
+    .map(coerceEvidenceShape)
+    .filter((e) => EvidenceItem.safeParse(e).success);
+}, z.array(EvidenceItem).default([]));
+
+const FindingSchema = z.object({
+  id: z.string(),
+  statement: z.string(),
+  evidenceIds: z.array(z.string()).default([]),
+  confidence: TolerantConfidence,
+});
+
+/** Same salvage policy as evidence (observed live: qwen-plus emits findings
+ *  without `statement`, using another key). Alias-map, fill a positional id,
+ *  default a missing confidence to the weakest label, drop what still fails. */
+const TolerantFindingsList = z.preprocess((v) => {
+  if (!Array.isArray(v)) return v;
+  return v
+    .map((raw, i) => {
+      if (typeof raw !== 'object' || raw === null) return raw;
+      const f = raw as Record<string, unknown>;
+      return {
+        ...f,
+        id: f.id ?? `f${i + 1}`,
+        statement: f.statement ?? f.text ?? f.finding ?? f.description ?? f.claim,
+        confidence: f.confidence ?? 'sin_evidencia',
+      };
+    })
+    .filter((f) => FindingSchema.safeParse(f).success);
+}, z.array(FindingSchema).default([]));
+
+export const AgentOutputSchema = z.object({
+  status: TolerantStatus,
+  // Also model-variance-prone: qwen-plus sometimes omits it, so it can't be
+  // required — resolveSummary() derives a fallback after parsing.
+  summary: z.string().optional(),
+  findings: TolerantFindingsList,
+  evidence: TolerantEvidenceList,
   clarification: ClarificationRequest.optional(),
 });
 export type AgentOutput = z.infer<typeof AgentOutputSchema>;
+
+/** The task summary shown in chat/trace: the model's, else the first finding,
+ *  else a neutral localized line — never a validation failure. */
+export function resolveSummary(out: AgentOutput, language: Language): string {
+  const s = out.summary?.trim();
+  if (s) return s;
+  const first = out.findings[0]?.statement?.trim();
+  if (first) return first;
+  return language === 'en' ? 'Task completed (no summary provided).' : 'Tarea completada (sin resumen).';
+}
 
 /** Render a task into a prompt for the specialist agent, in the run's language. */
 function taskPrompt(task: DomainTaskPacket, language: Language): string {
@@ -84,7 +167,7 @@ export function toSpecialistAgent(agentId: string, agent: Agent, modelId?: strin
           taskId: task.taskId,
           agentId,
           status: out.status,
-          summary: out.summary,
+          summary: resolveSummary(out, ctx.state.language),
           artifacts: [],
           findings: out.findings,
           evidence: out.evidence,
@@ -95,11 +178,16 @@ export function toSpecialistAgent(agentId: string, agent: Agent, modelId?: strin
         };
       } catch (err) {
         recordLlmCall('chat', Date.now() - start, false, { model: modelId });
+        // The summary reaches the chat UI — keep it generic; the real error stays
+        // in `errors[]` for the trace/debugger (same policy as the HTTP layer).
         return {
           taskId: task.taskId,
           agentId,
           status: 'failed',
-          summary: err instanceof Error ? err.message : 'Error del agente',
+          summary:
+            ctx.state.language === 'en'
+              ? 'The agent could not complete this task.'
+              : 'El agente no pudo completar esta tarea.',
           artifacts: [],
           findings: [],
           evidence: [],

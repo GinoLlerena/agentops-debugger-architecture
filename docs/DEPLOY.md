@@ -202,6 +202,111 @@ docker push registry.<region>.aliyuncs.com/<ns>/agentops-debugger:latest
 5. [ ] Note FC's request timeout — long Qwen calls must finish within it;
        raise the function timeout if needed.
 
+### Option D — ECS + Docker image over SSH (no registry) ⭐ as executed 2026-07-01
+
+The path actually used for the hackathon deploy. **Why:** ACR *Personal* Edition
+is **not available to (newer) international accounts** — the console only offers
+Enterprise Edition (subscription, ~$40+/month) and the API returns
+`USER_NOT_REGISTERED` in every region. FC can only pull from ACR, so instead:
+build locally → `docker save` → `scp` → `docker load` on a pay-as-you-go ECS
+instance (~$0.05/h). Same hardened container, no registry at all.
+
+**Prerequisites:** Docker Desktop running; `aliyun` CLI configured (`aliyun sts
+GetCallerIdentity` works); the RAM user needs ECS + VPC permissions.
+
+```bash
+REGION=ap-southeast-1
+
+# 0. Build for amd64 (matches ECS x86) and export (~146 MB gzipped)
+docker build --platform linux/amd64 -t agentops-debugger:latest .
+docker save agentops-debugger:latest | gzip > /tmp/agentops-image.tar.gz
+
+# 1. Dedicated SSH key (imported to ECS as a key pair)
+ssh-keygen -t ed25519 -f ~/.ssh/agentops_ecs -N "" -C agentops-ecs-deploy
+aliyun ecs ImportKeyPair --RegionId $REGION --KeyPairName agentops-ecs \
+  --PublicKeyBody "$(cat ~/.ssh/agentops_ecs.pub)"
+
+# 2. Network (a fresh account has NO default VPC — create everything)
+aliyun vpc CreateVpc --RegionId $REGION --CidrBlock 192.168.0.0/16 --VpcName agentops-vpc
+#    → note VpcId; wait ~5 s for it to be Available before the next call
+aliyun vpc CreateVSwitch --RegionId $REGION --VpcId <VpcId> \
+  --ZoneId ${REGION}a --CidrBlock 192.168.1.0/24 --VSwitchName agentops-vsw
+aliyun ecs CreateSecurityGroup --RegionId $REGION --VpcId <VpcId> \
+  --SecurityGroupName agentops-sg
+aliyun ecs AuthorizeSecurityGroup --RegionId $REGION --SecurityGroupId <SgId> \
+  --IpProtocol tcp --PortRange 22/22 --SourceCidrIp 0.0.0.0/0
+aliyun ecs AuthorizeSecurityGroup --RegionId $REGION --SecurityGroupId <SgId> \
+  --IpProtocol tcp --PortRange 8787/8787 --SourceCidrIp 0.0.0.0/0
+
+# 3. Instance — ecs.e-c1m2.large (2 vCPU/4 GB economy) is plenty.
+#    ⚠ Image: use the PLAIN base image 'ubuntu_24_04_x64_20G_alibase_*'.
+#      The first DescribeImages hit may be the 100 GB GPU/CUDA variant, which
+#      fails with InvalidSystemDiskSize.LessThanImageSize on a 40 GB disk.
+#    ⚠ e-series requires SystemDisk.Category=cloud_essd_entry.
+#    ⚠ InternetMaxBandwidthOut > 0 is what allocates the public IP;
+#      PayByTraffic bills only transferred GB.
+aliyun ecs RunInstances --RegionId $REGION \
+  --ImageId "$(aliyun ecs DescribeImages --RegionId $REGION --OSType linux \
+      --ImageOwnerAlias system --ImageName 'ubuntu_24_04_x64_20G_alibase*' \
+      | jq -r '.Images.Image[0].ImageId')" \
+  --InstanceType ecs.e-c1m2.large --InstanceChargeType PostPaid \
+  --VSwitchId <VSwitchId> --SecurityGroupId <SgId> --KeyPairName agentops-ecs \
+  --InstanceName agentops-demo --InternetMaxBandwidthOut 10 \
+  --InternetChargeType PayByTraffic \
+  --SystemDisk.Category cloud_essd_entry --SystemDisk.Size 40
+#    → poll DescribeInstances until Status=Running and PublicIpAddress is set.
+#      sshd takes ANOTHER ~1–2 min after Running — retry ssh, don't panic.
+
+# 4. Install Docker + ship image and env (login user is root on Alibaba images)
+IP=<PublicIp>
+ssh -i ~/.ssh/agentops_ecs root@$IP \
+  "apt-get update -qq && apt-get install -y -qq docker.io && systemctl enable --now docker"
+scp -i ~/.ssh/agentops_ecs /tmp/agentops-image.tar.gz root@$IP:/root/
+#    app.env: build LOCALLY (never echo secrets), then scp + chmod 600.
+#    Contents: DASHSCOPE_API_KEY=…  DEMO_ACCESS_TOKEN=$(openssl rand -hex 16)
+#              RATE_LIMIT_PER_MIN=60
+#    (DASHSCOPE_BASE_URL not needed: the intl endpoint is the app default.)
+scp -i ~/.ssh/agentops_ecs app.env root@$IP:/root/app.env
+
+# 5. Run
+ssh -i ~/.ssh/agentops_ecs root@$IP "chmod 600 /root/app.env \
+  && docker load < /root/agentops-image.tar.gz \
+  && docker run -d --name agentops --restart unless-stopped \
+       -p 8787:8787 --env-file /root/app.env agentops-debugger:latest \
+  && sleep 4 && curl -s http://localhost:8787/health"
+#    → expect {"status":"ok","mode":"live"} — then run the §7 smoke test
+#      against http://$IP:8787 (remember the /unlock cookie step).
+
+# Redeploy after a code change = rebuild → save → scp → swap:
+ssh -i ~/.ssh/agentops_ecs root@$IP "docker rm -f agentops && docker load \
+  < /root/agentops-image.tar.gz && docker run -d --name agentops \
+  --restart unless-stopped -p 8787:8787 --env-file /root/app.env \
+  agentops-debugger:latest"
+```
+
+**Teardown (§9) — stop billing the moment proof is captured:**
+
+```bash
+# Stop compute charges but keep the instance (restartable, IP may change):
+aliyun ecs StopInstance --InstanceId <InstanceId> --StoppedMode StopCharging
+# Or release everything (instance → security group → vSwitch → VPC, in order):
+aliyun ecs DeleteInstance --InstanceId <InstanceId> --Force true
+aliyun ecs DeleteSecurityGroup --RegionId $REGION --SecurityGroupId <SgId>
+aliyun vpc DeleteVSwitch --RegionId $REGION --VSwitchId <VSwitchId>
+aliyun vpc DeleteVpc --RegionId $REGION --VpcId <VpcId>
+```
+
+Gotchas that cost time on 2026-07-01, in one place:
+- **ACR Personal = unavailable** on international accounts (`USER_NOT_REGISTERED`,
+  console shows only "Create ACR EE"). Don't chase it; use this option.
+- **Wrong Ubuntu image variant** → `InvalidSystemDiskSize.LessThanImageSize`.
+- **e-series disks** must be `cloud_essd_entry`.
+- **SSH timeout right after Running** is normal — cloud-init hasn't finished.
+- The **planner/specialist structured output needed live-tolerance fixes**
+  (status-enum coercion, degenerate-plan retry) that offline tests structurally
+  couldn't catch — always run §7's *live Flow B* after deploying, not just
+  `/health`.
+
 > Tablestore + OSS reach is identical across all options. Prefer the **public**
 > Tablestore endpoint unless the compute sits in the same VPC (then use the VPC
 > endpoint for lower latency + no public traffic).
