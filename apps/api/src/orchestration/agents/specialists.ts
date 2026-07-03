@@ -14,7 +14,12 @@ import { createOefaTools } from '../../services/oefa/tools.js';
 import type { OefaService } from '../../services/oefa/oefa-service.js';
 import { createRagTools, type RagService } from '../../services/rag/index.js';
 import type { ReportStore } from '../../persistence/report-store.js';
-import { buildDataArtifacts, entityQueryFor, recordToEvidence } from '../data-artifacts.js';
+import {
+  buildDataArtifacts,
+  entityQueryFor,
+  recordToEvidence,
+  rucInQuestion,
+} from '../data-artifacts.js';
 import { detectListingIntent, runListingTask } from '../listing.js';
 import { messages } from '../../i18n/messages.js';
 import {
@@ -292,9 +297,19 @@ export function toLiveDataAgent(
       //   genuinely ambiguous (and unanswered) → a candidates card that always works;
       //   otherwise → the narrator's result stands.
       if (result.status !== 'completed') {
-        if (result.status === 'failed' && !clarified) return result;
         const base = await oefa.getRecords();
-        const entityQuery = clarified ?? entityQueryFor(rawQuery, base.records);
+        // Live round 8: an LLM hop corrupted a RUC's digits in transit — the
+        // planner wrote the task inputs (or the narrator echoed them) with an
+        // extra digit ('20543210981' → '205432110981') and the task failed as
+        // "malformed RUC" without a single tool call. The user's verbatim
+        // message is the authority for a RUC: if it names one that matches a
+        // record, resolve deterministically — even for a failed narrative. A
+        // failure with no such anchor still passes through untouched.
+        const verbatimRuc = clarified
+          ? undefined
+          : rucInQuestion(original?.text ?? rawQuery, base.records);
+        if (result.status === 'failed' && !clarified && !verbatimRuc) return result;
+        const entityQuery = clarified ?? verbatimRuc ?? entityQueryFor(rawQuery, base.records);
         const profile = await oefa.getCompanyProfile(entityQuery);
         const m = messages(ctx.state.language);
         if (profile.status === 'ok') {
@@ -304,6 +319,7 @@ export function toLiveDataAgent(
             ...result,
             status: 'completed',
             clarification: undefined,
+            errors: [],
             summary: m.dataSummary({
               total: stats.totalRecords,
               administrado: entity.administrado,
