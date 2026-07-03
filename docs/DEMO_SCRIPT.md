@@ -29,13 +29,14 @@ the English strings.
 > lets an analyst ask in plain English or Spanish and get an **evidence-cited**
 > answer — and it **shows its work**."
 
-**Show:** the **Dashboard** (`/`) — KPIs, charts, sessions table.
+**Show:** the **Dashboard** (`/`) — KPIs, charts, the **Recent investigations**
+table.
 
 ---
 
 ### Scene 2 — Discovery + Flow B: grounded Q&A with citations (0:20–1:10)
 
-**Do (discovery beat, ~15 s):** open a session, click the starter
+**Do (discovery beat, ~15 s):** click **New investigation**, then the starter
 *"List the sanctioned entities in the last 5 years"*. The agent answers
 with a **clickable listing** — every sanctioned entity as a candidate card
 (name, RUC, sector, record count; deterministic, so it streams fast). Click
@@ -45,7 +46,7 @@ entity.
 > "You don't need to know a RUC to start — ask for a listing, click an entity,
 > and the agent takes it from there."
 
-**Do (grounded Q&A beat):** in a new session, click the starter
+**Do (grounded Q&A beat):** start another **New investigation**, click the starter
 *"Background of the regulated entity with RUC 20543210981"* (or type it).
 
 **Show, as it streams:**
