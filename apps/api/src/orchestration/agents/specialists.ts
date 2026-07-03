@@ -22,6 +22,7 @@ import {
 } from '../data-artifacts.js';
 import { detectListingIntent, runListingTask } from '../listing.js';
 import { messages } from '../../i18n/messages.js';
+import { foldAccents } from '../../services/util/text.js';
 import {
   createOfflineReportAgent,
   createOfflineReportManager,
@@ -399,9 +400,61 @@ export function toLiveDataAgent(
         producedByAgentId: AGENT_IDS.data,
         language: ctx.state.language,
       });
+      // Live: the narrator can hallucinate a DIFFERENT administrado in its
+      // summary even while citing the right records (observed twice with
+      // qwen-plus: "MINISTERIO DE ENERGIA Y MINAS", then "SOCIEDAD ANONIMA
+      // AGRICOLA EL MOLINO" — both for Las Bambas' RUC). The narrative must
+      // name the entity the records resolve to; otherwise the deterministic
+      // summary/findings/evidence replace it (artifacts already match).
+      if (summaryNamesDifferentEntity(result.summary, entity.administrado)) {
+        const m = messages(ctx.state.language);
+        const evidence = records.slice(0, 5).map((r) => recordToEvidence(r, AGENT_IDS.data));
+        return {
+          ...result,
+          summary: m.dataSummary({
+            total: stats.totalRecords,
+            administrado: entity.administrado,
+            firm: stats.firmCount,
+          }),
+          evidence,
+          findings: [
+            {
+              id: 'F-data',
+              statement: m.dataFinding({
+                administrado: entity.administrado,
+                total: stats.totalRecords,
+                firm: stats.firmCount,
+                uit: stats.sumFineUit,
+                reincidencia: stats.reincidencia,
+              }),
+              evidenceIds: evidence.map((e) => e.id),
+              confidence: 'directa',
+            },
+          ],
+          artifacts: [...result.artifacts, ...artifacts],
+        };
+      }
       return { ...result, artifacts: [...result.artifacts, ...artifacts] };
     },
   };
+}
+
+/** A quoted name, or a run of ≥2 ALL-CAPS words (optionally joined by Spanish
+ *  connectors) — the shapes hallucinated entity names arrive in. */
+const NAME_LIKE =
+  /'[^']{4,}'|"[^"]{4,}"|«[^»]{4,}»|\b[A-ZÁÉÍÓÚÑ]{3,}(?:\s+(?:DE|DEL|Y|E|LA|LAS|LOS|EL))*\s+[A-ZÁÉÍÓÚÑ]{3,}\b/;
+
+/** True when the narrative appears to name a DIFFERENT entity than the records
+ *  resolve: no distinctive token (≥4 chars, accent-folded) of the administrado
+ *  appears in it, yet it contains a name-like phrase. A generic summary that
+ *  names no company at all is left alone. */
+function summaryNamesDifferentEntity(summary: string, administrado: string): boolean {
+  const s = foldAccents(summary);
+  const tokens = foldAccents(administrado)
+    .split(/[^a-z0-9]+/)
+    .filter((t) => t.length >= 4);
+  if (tokens.length === 0 || tokens.some((t) => s.includes(t))) return false;
+  return NAME_LIKE.test(summary);
 }
 
 /**
