@@ -259,6 +259,56 @@ describe('toLiveDataAgent — narrative + deterministic artifacts', () => {
     expect(result.artifacts).toHaveLength(0);
   });
 
+  it('replaces the narrative when it names a different entity than the records resolve', async () => {
+    // Observed live: the narrator cited the right records but summarized a
+    // hallucinated company ("SOCIEDAD ANONIMA AGRICOLA EL MOLINO" for Las
+    // Bambas' RUC). The narrative must name the resolved administrado.
+    const wrongEntity: AgentOutput = {
+      status: 'completed',
+      summary:
+        "Regulatory records retrieved. Entity resolved as 'SOCIEDAD ANONIMA AGRICOLA EL MOLINO'.",
+      findings: [],
+      evidence: [{ id: 'OEFA:a1', documentTitle: 'Res. 1', passage: 'p', confidence: 'directa' }],
+    };
+    const agent = toLiveDataAgent(fakeAgent(wrongEntity), oefaService());
+    const result = await agent.run(
+      task({ query: 'Background of the regulated entity with RUC 20543210981' }),
+      ctx('Background of the regulated entity with RUC 20543210981'),
+    );
+    expect(result.status).toBe('completed');
+    expect(result.summary).toContain('Minera Las Bambas');
+    expect(result.summary).not.toContain('MOLINO');
+    expect(result.evidence[0]!.id).toMatch(/^OEFA:/);
+    expect(result.artifacts.some((a) => a.kind === 'record_set')).toBe(true);
+  });
+
+  it('keeps a consistent narrative that names the resolved entity', async () => {
+    const consistent: AgentOutput = {
+      status: 'completed',
+      summary: 'Las Bambas registra sanciones firmes en el período consultado.',
+      findings: [],
+      evidence: [{ id: 'OEFA:a1', documentTitle: 'Res. 1', passage: 'p', confidence: 'directa' }],
+    };
+    const agent = toLiveDataAgent(fakeAgent(consistent), oefaService());
+    const result = await agent.run(task({ query: 'RUC 20543210981' }), ctx('RUC 20543210981'));
+    expect(result.summary).toBe('Las Bambas registra sanciones firmes en el período consultado.');
+    expect(result.artifacts.some((a) => a.kind === 'record_set')).toBe(true);
+  });
+
+  it('keeps a generic narrative that names no company at all', async () => {
+    // "La empresa registra…" mentions no entity tokens but also no other name —
+    // that is a legitimate narrative style, not a hallucination.
+    const generic: AgentOutput = {
+      status: 'completed',
+      summary: 'La empresa registra 4 sanciones, 2 de ellas firmes.',
+      findings: [],
+      evidence: [{ id: 'OEFA:a1', documentTitle: 'Res. 1', passage: 'p', confidence: 'directa' }],
+    };
+    const agent = toLiveDataAgent(fakeAgent(generic), oefaService());
+    const result = await agent.run(task({ query: 'RUC 20543210981' }), ctx('RUC 20543210981'));
+    expect(result.summary).toBe('La empresa registra 4 sanciones, 2 de ellas firmes.');
+  });
+
   it('replaces a hollow completion (zero evidence) with the deterministic answer', async () => {
     // Observed live: the model called the right tools, then narrated the WRONG
     // entity ("MINISTERIO DE ENERGIA Y MINAS" for Las Bambas' RUC); the
