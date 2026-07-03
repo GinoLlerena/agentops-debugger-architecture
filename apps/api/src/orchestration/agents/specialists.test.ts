@@ -259,6 +259,30 @@ describe('toLiveDataAgent — narrative + deterministic artifacts', () => {
     expect(result.artifacts).toHaveLength(0);
   });
 
+  it('replaces a hollow completion (zero evidence) with the deterministic answer', async () => {
+    // Observed live: the model called the right tools, then narrated the WRONG
+    // entity ("MINISTERIO DE ENERGIA Y MINAS" for Las Bambas' RUC); the
+    // guardrail dropped every uncited finding, leaving completed + no evidence
+    // — but the wrong summary survived. An entity answer without evidence is
+    // never legitimate in this domain.
+    const hollow: AgentOutput = {
+      status: 'completed',
+      summary: "Entity resolved as 'MINISTERIO DE ENERGIA Y MINAS' with no ambiguity.",
+      findings: [],
+      evidence: [],
+    };
+    const agent = toLiveDataAgent(fakeAgent(hollow), oefaService());
+    const result = await agent.run(
+      task({ query: 'Background of the regulated entity with RUC 20543210981' }),
+      ctx('Background of the regulated entity with RUC 20543210981'),
+    );
+    expect(result.status).toBe('completed');
+    expect(result.summary).toContain('Minera Las Bambas');
+    expect(result.summary).not.toContain('MINISTERIO');
+    expect(result.evidence.length).toBeGreaterThan(0);
+    expect(result.artifacts.some((a) => a.kind === 'record_set')).toBe(true);
+  });
+
   it('anchors a model clarification to the verbatim RUC even when the task inputs are corrupted', async () => {
     const clarifying: AgentOutput = {
       status: 'needs_user_input',
@@ -362,6 +386,24 @@ describe('toLiveDocsAgent — narrative + deterministic retrieval fallback', () 
     expect(result.evidence.length).toBeGreaterThan(0);
     expect(result.evidence[0]!.producedByAgentId).toBe('docs-agent');
     expect(result.findings.length).toBe(1);
+  });
+
+  it('retrieves deterministically when the narrator completes hollow (declared "no documents" without evidence)', async () => {
+    // Observed live: qwen-plus completed the docs task with "the query returned
+    // no matching records" WITHOUT ever calling its retrieval tool (no
+    // tool_called events, zero evidence). Only the deterministic retriever may
+    // conclude "no documents".
+    const hollow: AgentOutput = {
+      status: 'completed',
+      summary: 'No normative documents were retrieved. The query returned no matching records.',
+      findings: [],
+      evidence: [],
+    };
+    const agent = toLiveDocsAgent(fakeAgent(hollow), await ragService());
+    const result = await agent.run(docsTask(), ctx('antecedentes de minera'));
+    expect(result.status).toBe('completed');
+    expect(result.evidence.length).toBeGreaterThan(0);
+    expect(result.evidence[0]!.producedByAgentId).toBe('docs-agent');
   });
 
   it('falls back too when the narrator asks for clarification (docs never needs one)', async () => {
