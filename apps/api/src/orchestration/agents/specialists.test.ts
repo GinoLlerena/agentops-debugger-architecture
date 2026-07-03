@@ -259,6 +259,51 @@ describe('toLiveDataAgent — narrative + deterministic artifacts', () => {
     expect(result.artifacts).toHaveLength(0);
   });
 
+  it('drops fabricated evidence (invented record ids) and answers deterministically', async () => {
+    // Observed live: the model invented 17 plausible evidence items — fake
+    // record ids, findings and resolution numbers for an invented entity
+    // ("Sociedad Minera El Brocal S.A.A."). None cite a real record, so the
+    // answer is hollow and the deterministic resolution replaces it.
+    const fabricated: AgentOutput = {
+      status: 'completed',
+      summary:
+        'Regulatory records for RUC 20543210981 (Sociedad Minera El Brocal S.A.A.) retrieved.',
+      findings: [],
+      evidence: [
+        { id: 'OEFA:123456789', documentTitle: 'Registro de Administrados OEFA', passage: 'RUC: 20543210981 | Razón Social: Sociedad Minera El Brocal S.A.A.', confidence: 'directa' },
+        { id: 'OEFA:SV-2020-0891', documentTitle: 'Supervisiones Concluidas', passage: 'Hallazgo: falta de actualización del PMA.', confidence: 'directa' },
+      ],
+    };
+    const agent = toLiveDataAgent(fakeAgent(fabricated), oefaService());
+    const result = await agent.run(
+      task({ query: 'Background of the regulated entity with RUC 20543210981' }),
+      ctx('Background of the regulated entity with RUC 20543210981'),
+    );
+    expect(result.status).toBe('completed');
+    expect(result.summary).toContain('Minera Las Bambas');
+    expect(result.summary).not.toContain('Brocal');
+    // every surviving evidence item cites a real seed record
+    const realIds = new Set(['OEFA:a1', 'OEFA:a2', 'OEFA:b1']);
+    expect(result.evidence.length).toBeGreaterThan(0);
+    for (const e of result.evidence) expect(realIds.has(e.id)).toBe(true);
+  });
+
+  it('keeps verifiable evidence while dropping the fabricated items alongside it', async () => {
+    const mixed: AgentOutput = {
+      status: 'completed',
+      summary: 'Las Bambas registra sanciones firmes.',
+      findings: [],
+      evidence: [
+        { id: 'OEFA:a1', documentTitle: 'Res. 1', passage: 'p', confidence: 'directa' },
+        { id: 'OEFA:INVENTED-99', documentTitle: 'Fake', passage: 'x', confidence: 'directa' },
+      ],
+    };
+    const agent = toLiveDataAgent(fakeAgent(mixed), oefaService());
+    const result = await agent.run(task({ query: 'RUC 20543210981' }), ctx('RUC 20543210981'));
+    expect(result.summary).toBe('Las Bambas registra sanciones firmes.');
+    expect(result.evidence.map((e) => e.id)).toEqual(['OEFA:a1']);
+  });
+
   it('replaces the narrative when it names a different entity than the records resolve', async () => {
     // Observed live: the narrator cited the right records but summarized a
     // hallucinated company ("SOCIEDAD ANONIMA AGRICOLA EL MOLINO" for Las
