@@ -288,7 +288,20 @@ export function toLiveDataAgent(
           });
         }
       }
-      const result = await narrator.run(task, ctx);
+      let result = await narrator.run(task, ctx);
+      const base = await oefa.getRecords();
+      // Evidence for OEFA data must be VERIFIABLE: observed live, the model
+      // fabricated 17 plausible evidence items in one answer (invented record
+      // ids, findings and resolution numbers for an invented entity). Keep only
+      // items whose id cites a real record (`OEFA:<id>` — the contract the
+      // evidence drawer resolves); everything else is an unauditable claim.
+      // Findings citing dropped items lose their backing and are dropped by the
+      // coordinator's evidence guardrail.
+      const knownIds = new Set(base.records.map((r) => `OEFA:${r.id}`));
+      const verifiable = result.evidence.filter((e) => knownIds.has(e.id));
+      if (verifiable.length !== result.evidence.length) {
+        result = { ...result, evidence: verifiable };
+      }
       // Deterministic backstop for a non-completed narrative (live variance,
       // observed with qwen-plus on the deployed instance): the model sometimes
       // claims ambiguity for a query that resolves uniquely, re-asks a
@@ -298,13 +311,12 @@ export function toLiveDataAgent(
       //   resolves → answer like the offline agent (summary/finding/evidence/artifacts);
       //   genuinely ambiguous (and unanswered) → a candidates card that always works;
       //   otherwise → the narrator's result stands.
-      // A "hollow" completion (completed but zero evidence — observed live when
-      // the model narrated the wrong entity and the guardrail dropped every
-      // uncited finding) is treated the same: in this domain an entity answer
-      // without evidence is never legitimate, so the summary must not stand.
+      // A "hollow" completion (completed but zero verifiable evidence — the
+      // wrong-entity narration and the fabricated-evidence answer both land
+      // here) is treated the same: in this domain an entity answer without
+      // evidence is never legitimate, so the summary must not stand.
       const hollow = result.status === 'completed' && result.evidence.length === 0;
       if (result.status !== 'completed' || hollow) {
-        const base = await oefa.getRecords();
         // Live round 8: an LLM hop corrupted a RUC's digits in transit — the
         // planner wrote the task inputs (or the narrator echoed them) with an
         // extra digit ('20543210981' → '205432110981') and the task failed as
@@ -380,7 +392,6 @@ export function toLiveDataAgent(
       // Inbound edge: the entity heuristic matches over the Spanish corpus, so a
       // non-Spanish query is translated first (a clarification answer is verbatim).
       const query = clarified ?? (await translateQuery(rawQuery, ctx.state.language, translator));
-      const base = await oefa.getRecords();
       // Resolve the entity the artifacts describe: a clarification answer is
       // authoritative; else anchor to the company the LLM cited; else fall back
       // to the query heuristic. This guarantees the charts/records match the
@@ -439,10 +450,12 @@ export function toLiveDataAgent(
   };
 }
 
-/** A quoted name, or a run of ≥2 ALL-CAPS words (optionally joined by Spanish
- *  connectors) — the shapes hallucinated entity names arrive in. */
+/** A quoted name, a run of ≥2 ALL-CAPS words, or a Title-Case run of ≥2 words
+ *  (optionally joined by Spanish connectors) — the shapes hallucinated entity
+ *  names have arrived in ("MINISTERIO DE ENERGIA Y MINAS", 'SOCIEDAD ANONIMA
+ *  AGRICOLA EL MOLINO', "Sociedad Minera El Brocal S.A.A."). */
 const NAME_LIKE =
-  /'[^']{4,}'|"[^"]{4,}"|«[^»]{4,}»|\b[A-ZÁÉÍÓÚÑ]{3,}(?:\s+(?:DE|DEL|Y|E|LA|LAS|LOS|EL))*\s+[A-ZÁÉÍÓÚÑ]{3,}\b/;
+  /'[^']{4,}'|"[^"]{4,}"|«[^»]{4,}»|\b[A-ZÁÉÍÓÚÑ]{3,}(?:\s+(?:DE|DEL|Y|E|LA|LAS|LOS|EL))*\s+[A-ZÁÉÍÓÚÑ]{3,}\b|\b[A-ZÁÉÍÓÚÑ][a-záéíóúñ]{3,}(?:\s+(?:de|del|y|e|la|las|los|el))*\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]{2,}\b/;
 
 /** True when the narrative appears to name a DIFFERENT entity than the records
  *  resolve: no distinctive token (≥4 chars, accent-folded) of the administrado
