@@ -453,17 +453,38 @@ describe('toLiveDocsAgent — narrative + deterministic retrieval fallback', () 
     return rag;
   }
 
-  it('keeps the narrator answer when it completes', async () => {
+  it('keeps the narrator answer when it cites a real corpus chunk', async () => {
+    const rag = await ragService();
+    const [hit] = await rag.retrieve('multa', { limit: 1 });
     const narrated: AgentOutput = {
       status: 'completed',
-      summary: 'Se recuperaron 2 fragmentos normativos.',
+      summary: 'Se recuperó 1 fragmento normativo.',
       findings: [],
-      evidence: [{ id: 'DOC:x', documentTitle: 'Guía', passage: 'p', confidence: 'directa' }],
+      evidence: [
+        { id: hit!.chunk.id, documentTitle: 'Guía', passage: 'p', confidence: 'directa' },
+      ],
     };
-    const agent = toLiveDocsAgent(fakeAgent(narrated), await ragService());
+    const agent = toLiveDocsAgent(fakeAgent(narrated), rag);
     const result = await agent.run(docsTask(), ctx('antecedentes de minera'));
-    expect(result.summary).toBe('Se recuperaron 2 fragmentos normativos.');
-    expect(result.evidence[0]!.id).toBe('DOC:x');
+    expect(result.summary).toBe('Se recuperó 1 fragmento normativo.');
+    expect(result.evidence[0]!.id).toBe(hit!.chunk.id);
+  });
+
+  it('retrieves deterministically when every cited chunk id is junk', async () => {
+    // Observed live: "no documents" narrated alongside a junk 'E1' evidence
+    // item — non-empty evidence that verifies against nothing in the corpus.
+    const junk: AgentOutput = {
+      status: 'completed',
+      summary: 'No normative documents were retrieved.',
+      findings: [],
+      evidence: [{ id: 'E1', documentTitle: 'x', passage: 'y', confidence: 'directa' }],
+    };
+    const agent = toLiveDocsAgent(fakeAgent(junk), await ragService());
+    const result = await agent.run(docsTask(), ctx('antecedentes de minera'));
+    expect(result.status).toBe('completed');
+    expect(result.evidence.length).toBeGreaterThan(0);
+    expect(result.evidence[0]!.producedByAgentId).toBe('docs-agent');
+    expect(result.evidence.every((e) => e.id !== 'E1')).toBe(true);
   });
 
   it('answers with deterministic retrieval when the narrator throws (live: structured-output validation)', async () => {

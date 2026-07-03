@@ -494,7 +494,15 @@ export function toLiveDocsAgent(
     agentId: AGENT_IDS.docs,
     async run(task: DomainTaskPacket, ctx: AgentRunContext): Promise<DomainTaskResult> {
       const result = await narrator.run(task, ctx);
-      if (result.status === 'completed' && result.evidence.length > 0) return result;
+      // A docs citation is only trustworthy if its id resolves to a real corpus
+      // chunk (observed live: "no documents" narrated alongside a junk 'E1'
+      // evidence item, which made the answer look non-hollow).
+      const verifiable = result.evidence.filter((e) => rag.hasChunk(e.id));
+      if (result.status === 'completed' && verifiable.length > 0) {
+        return verifiable.length === result.evidence.length
+          ? result
+          : { ...result, evidence: verifiable };
+      }
       return fallback.run(task, ctx);
     },
   };

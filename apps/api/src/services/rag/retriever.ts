@@ -50,6 +50,12 @@ export class RagService {
     return this.embedder ? 'hybrid' : 'lexical';
   }
 
+  /** True when a chunk with this id exists in the corpus — a docs citation is
+   *  only trustworthy if its id resolves to a real indexed chunk. */
+  hasChunk(id: string): boolean {
+    return this.index.has(id);
+  }
+
   async indexDocument(doc: RagDocument): Promise<DocChunk[]> {
     const chunks = chunkDocument(doc, this.chunkOptions);
     if (this.embedder && chunks.length > 0) {

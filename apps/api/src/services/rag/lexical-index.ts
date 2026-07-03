@@ -64,6 +64,11 @@ export class LexicalIndex {
     return this.chunks.length;
   }
 
+  /** True when a chunk with this id is indexed — used to verify citations. */
+  has(id: string): boolean {
+    return this.chunks.some((c) => c.id === id);
+  }
+
   search(query: string, opts: { limit?: number; filter?: RetrievalFilter } = {}): RetrievalResult[] {
     const limit = opts.limit ?? 5;
     const qTerms = [...new Set(tokenize(query))];
