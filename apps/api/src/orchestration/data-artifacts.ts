@@ -17,6 +17,14 @@ function clean(text: string): string[] {
     .filter((t) => t.length >= 4);
 }
 
+/** The 11-digit RUC named in a question, iff it matches a known record. Digit
+ *  boundaries make a 12-digit run (typo, or an LLM hop corrupting digits) match
+ *  nothing, and the record check rejects stray ids/amounts of 11 digits. */
+export function rucInQuestion(question: string, records: OefaRecord[]): string | undefined {
+  const ruc = question.match(/(?<!\d)\d{11}(?!\d)/);
+  return ruc && records.some((r) => r.ruc === ruc[0]) ? ruc[0] : undefined;
+}
+
 /** Pick an entity query from a free-text question: an 11-digit RUC wins (only if it
  *  matches a known record); else a full administrado name contained in the question;
  *  else the longest query token present in some administrado name. */
@@ -24,8 +32,8 @@ export function entityQueryFor(question: string, records: OefaRecord[]): string 
   // Only treat an 11-digit run as a RUC if it actually matches a known record —
   // otherwise a stray document id / number would shadow a company name present
   // in the same question.
-  const ruc = question.match(/\b\d{11}\b/);
-  if (ruc && records.some((r) => r.ruc === ruc[0])) return ruc[0];
+  const ruc = rucInQuestion(question, records);
+  if (ruc) return ruc;
   // A full company name in the question (e.g. from a suggestion chip: "Generate a
   // background report for Minera Las Bambas S.A.") resolves that entity uniquely —
   // single tokens like "bambas" would be ambiguous across similarly-named ones.

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { OefaRecord } from '@agentops/shared';
-import { buildDataArtifacts, entityQueryFor } from './data-artifacts.js';
+import { buildDataArtifacts, entityQueryFor, rucInQuestion } from './data-artifacts.js';
 import { computeStats } from '../services/oefa/oefa-service.js';
 
 function rec(partial: Partial<OefaRecord> & { id: string; administrado: string }): OefaRecord {
@@ -43,6 +43,22 @@ describe('entityQueryFor', () => {
 
   it('falls back to the raw question when nothing matches', () => {
     expect(entityQueryFor('xyz', RECORDS)).toBe('xyz');
+  });
+});
+
+describe('rucInQuestion', () => {
+  it('returns the RUC when an 11-digit run matches a known record', () => {
+    expect(rucInQuestion('Background of the regulated entity with RUC 20543210981', RECORDS)).toBe(
+      '20543210981',
+    );
+  });
+
+  it('never matches inside a longer digit run (12-digit typo / corrupted digits)', () => {
+    expect(rucInQuestion('RUC 205432110981', RECORDS)).toBeUndefined();
+  });
+
+  it('rejects an 11-digit run that matches no record', () => {
+    expect(rucInQuestion('expediente 99999999999', RECORDS)).toBeUndefined();
   });
 });
 

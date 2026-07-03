@@ -211,6 +211,65 @@ describe('toLiveDataAgent — narrative + deterministic artifacts', () => {
     expect(result.artifacts).toHaveLength(0);
   });
 
+  it('rescues a failed narrative when the verbatim user text names a valid RUC', async () => {
+    // Live round 8 (qwen-plus, English): an LLM hop corrupted the RUC's digits
+    // in transit ('20543210981' → '205432110981') and the task failed as
+    // "malformed RUC" without a tool call. The user's message is the authority.
+    const failing: AgentOutput = {
+      status: 'failed',
+      summary:
+        "The provided RUC '205432110981' appears to be malformed: it contains 12 digits.",
+      findings: [],
+      evidence: [],
+    };
+    const agent = toLiveDataAgent(fakeAgent(failing), oefaService());
+    const result = await agent.run(
+      task({ query: 'Background of the regulated entity with RUC 205432110981' }), // corrupted inputs
+      ctx('Background of the regulated entity with RUC 20543210981'), // verbatim user text
+    );
+    expect(result.status).toBe('completed');
+    expect(result.errors).toHaveLength(0);
+    expect(result.summary).toContain('Minera Las Bambas');
+    expect(result.evidence[0]!.id).toMatch(/^OEFA:/);
+    expect(result.artifacts.some((a) => a.kind === 'record_set')).toBe(true);
+  });
+
+  it('still passes a failure through when the user text itself has a malformed RUC', async () => {
+    // A 12-digit typo typed by the user matches no record — the honest failure
+    // ("malformed RUC, no records retrieved") must stand.
+    const failing: AgentOutput = {
+      status: 'failed',
+      summary: 'Malformed RUC.',
+      findings: [],
+      evidence: [],
+    };
+    const agent = toLiveDataAgent(fakeAgent(failing), oefaService());
+    const result = await agent.run(
+      task({ query: 'RUC 205432110981' }),
+      ctx('Background of the regulated entity with RUC 205432110981'),
+    );
+    expect(result.status).toBe('failed');
+    expect(result.artifacts).toHaveLength(0);
+  });
+
+  it('anchors a model clarification to the verbatim RUC even when the task inputs are corrupted', async () => {
+    const clarifying: AgentOutput = {
+      status: 'needs_user_input',
+      summary: 'Which entity?',
+      findings: [],
+      evidence: [],
+      clarification: { question: 'Which?', candidates: [{ id: 'x', label: 'X' }] },
+    };
+    const agent = toLiveDataAgent(fakeAgent(clarifying), oefaService());
+    const result = await agent.run(
+      task({ query: 'RUC 205432110981' }), // corrupted inputs
+      ctx('Background of the regulated entity with RUC 20543210981'),
+    );
+    expect(result.status).toBe('completed');
+    expect(result.clarification).toBeUndefined();
+    expect(result.artifacts.some((a) => a.kind === 'record_set')).toBe(true);
+  });
+
   it('answers a listing query deterministically — the LLM is never called', async () => {
     const explodingAgent = {
       generate: async () => {
