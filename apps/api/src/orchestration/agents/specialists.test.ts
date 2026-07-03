@@ -1,9 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import type { Agent } from '@mastra/core/agent';
 import { OefaRecord, type DomainTaskPacket, type OrchestratorState } from '@agentops/shared';
-import { AgentOutputSchema, resolveSummary, toLiveDataAgent, type AgentOutput } from './specialists.js';
+import {
+  AgentOutputSchema,
+  resolveSummary,
+  toLiveDataAgent,
+  toLiveDocsAgent,
+  type AgentOutput,
+} from './specialists.js';
 import { InMemoryOefaCache } from '../../services/oefa/oefa-cache.js';
 import { OefaService, SeedRecordSource } from '../../services/oefa/oefa-service.js';
+import { loadSeedCorpus, RagService } from '../../services/rag/index.js';
 import type { AgentRunContext } from '../coordinator/types.js';
 
 function rec(partial: Partial<OefaRecord> & { id: string; administrado: string }): OefaRecord {
@@ -310,6 +317,68 @@ describe('toLiveDataAgent — narrative + deterministic artifacts', () => {
  * the model returns status synonyms outside the enum and sometimes omits the
  * summary. The schema must absorb that variance instead of failing the task.
  */
+describe('toLiveDocsAgent — narrative + deterministic retrieval fallback', () => {
+  const docsTask = (): DomainTaskPacket => ({
+    taskId: 'docs',
+    domain: 'oefa_docs',
+    operation: 'search',
+    title: 'Buscar documentos',
+    instruction: 'Recuperar normativa relevante',
+    inputs: { query: 'medidas correctivas y multas de minera' },
+    dependsOn: [],
+  });
+
+  async function ragService(): Promise<RagService> {
+    const rag = new RagService();
+    await rag.indexDocuments(await loadSeedCorpus());
+    return rag;
+  }
+
+  it('keeps the narrator answer when it completes', async () => {
+    const narrated: AgentOutput = {
+      status: 'completed',
+      summary: 'Se recuperaron 2 fragmentos normativos.',
+      findings: [],
+      evidence: [{ id: 'DOC:x', documentTitle: 'Guía', passage: 'p', confidence: 'directa' }],
+    };
+    const agent = toLiveDocsAgent(fakeAgent(narrated), await ragService());
+    const result = await agent.run(docsTask(), ctx('antecedentes de minera'));
+    expect(result.summary).toBe('Se recuperaron 2 fragmentos normativos.');
+    expect(result.evidence[0]!.id).toBe('DOC:x');
+  });
+
+  it('answers with deterministic retrieval when the narrator throws (live: structured-output validation)', async () => {
+    // Observed live: qwen-plus returned an array where the schema wants an
+    // object → MastraError → failed task → empty Documents tab. Retrieval is
+    // deterministic, so the fallback must answer instead.
+    const exploding = {
+      generate: async () => {
+        throw new Error('Structured output validation failed: - root: Expected object, received array');
+      },
+    } as unknown as Agent;
+    const agent = toLiveDocsAgent(exploding, await ragService());
+    const result = await agent.run(docsTask(), ctx('antecedentes de minera'));
+    expect(result.status).toBe('completed');
+    expect(result.evidence.length).toBeGreaterThan(0);
+    expect(result.evidence[0]!.producedByAgentId).toBe('docs-agent');
+    expect(result.findings.length).toBe(1);
+  });
+
+  it('falls back too when the narrator asks for clarification (docs never needs one)', async () => {
+    const clarifying: AgentOutput = {
+      status: 'needs_user_input',
+      summary: 'Which document?',
+      findings: [],
+      evidence: [],
+      clarification: { question: 'Which?', candidates: [{ id: 'x', label: 'X' }] },
+    };
+    const agent = toLiveDocsAgent(fakeAgent(clarifying), await ragService());
+    const result = await agent.run(docsTask(), ctx('antecedentes de minera'));
+    expect(result.status).toBe('completed');
+    expect(result.clarification).toBeUndefined();
+  });
+});
+
 describe('AgentOutputSchema — tolerant to live-model variance', () => {
   it.each([
     ['success', 'completed'],
