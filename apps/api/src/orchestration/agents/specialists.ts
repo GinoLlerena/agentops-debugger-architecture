@@ -297,7 +297,12 @@ export function toLiveDataAgent(
       //   resolves → answer like the offline agent (summary/finding/evidence/artifacts);
       //   genuinely ambiguous (and unanswered) → a candidates card that always works;
       //   otherwise → the narrator's result stands.
-      if (result.status !== 'completed') {
+      // A "hollow" completion (completed but zero evidence — observed live when
+      // the model narrated the wrong entity and the guardrail dropped every
+      // uncited finding) is treated the same: in this domain an entity answer
+      // without evidence is never legitimate, so the summary must not stand.
+      const hollow = result.status === 'completed' && result.evidence.length === 0;
+      if (result.status !== 'completed' || hollow) {
         const base = await oefa.getRecords();
         // Live round 8: an LLM hop corrupted a RUC's digits in transit — the
         // planner wrote the task inputs (or the narrator echoed them) with an
@@ -403,10 +408,13 @@ export function toLiveDataAgent(
  * Live Docs agent = Qwen narrator + deterministic retrieval fallback. Observed
  * live (qwen-plus): the model's structured output sometimes fails validation
  * (e.g. an array where the contract wants an object), which failed the docs
- * task outright and left the Documents tab empty. Retrieval itself is
- * deterministic (BM25/semantic over the seeded corpus), so on ANY non-completed
- * narrative the offline docs agent answers instead — same evidence contract,
- * same citations, no LLM needed.
+ * task outright and left the Documents tab empty; it also completes "hollow" —
+ * declaring "no matching records" WITHOUT ever calling its retrieval tool
+ * (zero evidence). Retrieval itself is deterministic (BM25/semantic over the
+ * seeded corpus), so any narrative that isn't a completed answer WITH evidence
+ * is answered by the offline docs agent instead — same evidence contract, same
+ * citations, no LLM needed. An honest "no documents" can only come from the
+ * deterministic retriever actually finding nothing.
  */
 export function toLiveDocsAgent(
   agent: Agent,
@@ -420,7 +428,7 @@ export function toLiveDocsAgent(
     agentId: AGENT_IDS.docs,
     async run(task: DomainTaskPacket, ctx: AgentRunContext): Promise<DomainTaskResult> {
       const result = await narrator.run(task, ctx);
-      if (result.status === 'completed') return result;
+      if (result.status === 'completed' && result.evidence.length > 0) return result;
       return fallback.run(task, ctx);
     },
   };
