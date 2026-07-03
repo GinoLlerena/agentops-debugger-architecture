@@ -26,6 +26,7 @@ import {
   createOfflineReportAgent,
   createOfflineReportManager,
 } from '../offline/offline-report-agents.js';
+import { createOfflineDocsAgent } from '../offline/offline-agents.js';
 import { AGENT_IDS } from '../manifests/registry.js';
 import type { AgentRunContext, SpecialistAgent } from '../coordinator/types.js';
 import { toMastraTools } from './mastra-tool.js';
@@ -399,6 +400,33 @@ export function toLiveDataAgent(
 }
 
 /**
+ * Live Docs agent = Qwen narrator + deterministic retrieval fallback. Observed
+ * live (qwen-plus): the model's structured output sometimes fails validation
+ * (e.g. an array where the contract wants an object), which failed the docs
+ * task outright and left the Documents tab empty. Retrieval itself is
+ * deterministic (BM25/semantic over the seeded corpus), so on ANY non-completed
+ * narrative the offline docs agent answers instead — same evidence contract,
+ * same citations, no LLM needed.
+ */
+export function toLiveDocsAgent(
+  agent: Agent,
+  rag: RagService,
+  translator: Translator = new NoopTranslator(),
+  modelId?: string,
+): SpecialistAgent {
+  const narrator = toSpecialistAgent(AGENT_IDS.docs, agent, modelId);
+  const fallback = createOfflineDocsAgent(rag, translator);
+  return {
+    agentId: AGENT_IDS.docs,
+    async run(task: DomainTaskPacket, ctx: AgentRunContext): Promise<DomainTaskResult> {
+      const result = await narrator.run(task, ctx);
+      if (result.status === 'completed') return result;
+      return fallback.run(task, ctx);
+    },
+  };
+}
+
+/**
  * Build the full specialist agent map (Data/Docs/Report/ReportManager) for the
  * live Coordinator. Data and Docs are Mastra (Qwen) agents; the Report agents
  * are the deterministic builders — a regulatory report carries a mandatory
@@ -427,9 +455,10 @@ export function createSpecialistAgents(deps: {
       chatModelId,
       clock,
     ),
-    [AGENT_IDS.docs]: toSpecialistAgent(
-      AGENT_IDS.docs,
+    [AGENT_IDS.docs]: toLiveDocsAgent(
       createDocsMastraAgent(deps.qwen, deps.rag),
+      deps.rag,
+      translator,
       chatModelId,
     ),
     [AGENT_IDS.report]: createOfflineReportAgent(deps.reportStore, idgen, clock),
