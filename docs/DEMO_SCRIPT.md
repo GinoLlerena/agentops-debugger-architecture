@@ -16,23 +16,27 @@ pnpm --filter @agentops/web dev      # → http://localhost:5173
 For the *live* recording, run the backend with the env from `DEPLOY.md` so
 `/health` shows `mode: "live"`, and point the browser at the deployed URL.
 
+**Record in the English UI:** switch the language toggle in the top bar to
+**EN** before recording. All labels, starter chips, and suggestions below use
+the English strings.
+
 ---
 
 ### Scene 1 — The problem (0:00–0:20)
 
 > "OEFA publishes Peru's environmental-compliance data as open data, but it's
 > scattered across datasets and dense legal resolutions. **AgentOps Debugger**
-> lets an analyst ask in plain Spanish and get an **evidence-cited** answer — and
-> it **shows its work**."
+> lets an analyst ask in plain English or Spanish and get an **evidence-cited**
+> answer — and it **shows its work**."
 
-**Show:** the **Panel** (`/`) — KPIs, charts, sessions table.
+**Show:** the **Dashboard** (`/`) — KPIs, charts, sessions table.
 
 ---
 
 ### Scene 2 — Discovery + Flow B: grounded Q&A with citations (0:20–1:10)
 
 **Do (discovery beat, ~15 s):** open a session, click the starter
-*"Lístame las entidades sancionadas en los últimos 5 años"*. The agent answers
+*"List the sanctioned entities in the last 5 years"*. The agent answers
 with a **clickable listing** — every sanctioned entity as a candidate card
 (name, RUC, sector, record count; deterministic, so it streams fast). Click
 **Minera Las Bambas S.A.** — the run resumes into a cited answer for that
@@ -41,8 +45,8 @@ entity.
 > "You don't need to know a RUC to start — ask for a listing, click an entity,
 > and the agent takes it from there."
 
-**Do (grounded Q&A beat):** in a new session, ask
-*"Antecedentes del administrado con RUC 20543210981"*.
+**Do (grounded Q&A beat):** in a new session, click the starter
+*"Background of the regulated entity with RUC 20543210981"* (or type it).
 
 **Show, as it streams:**
 - the **Plan** card morphing into a live **task checklist**,
@@ -64,7 +68,7 @@ real OEFA Junar API.
 ### Scene 3 — Agent-driven canvas (1:10–1:30)
 
 **Show:** the agent's `uiActions` drive the **canvas** — it auto-opens the
-**Datos OEFA** tab and renders charts (a **Recharts** sanctions-by-year bar chart
+**OEFA Data** tab and renders charts (a **Recharts** sanctions-by-year bar chart
 plus a custom segmented status-distribution bar and a procedural timeline).
 
 > "The agent doesn't free-form-render UI — it picks from **audited components**
@@ -76,15 +80,16 @@ plus a custom segmented status-distribution bar and a procedural timeline).
 
 **Do:** after Scene 2/3 settles, **suggestion chips** appear above the composer —
 state-aware next steps (deterministic, localized). Click
-*"Genera un informe de antecedentes de Minera Las Bambas S.A."*
-(or type *"Genera un informe de antecedentes del RUC 20543210981"*).
+*"Generate a background report for Minera Las Bambas S.A."*
+(or type *"Generate a background report for RUC 20543210981"*).
 
 **Show:**
-- a structured **report draft** appears in the **Informe** tab (carátula, resumen
-  ejecutivo with risk level, hallazgos with citations, advertencias,
-  recomendaciones, anexo de fuentes),
-- an **Approval card** — *nothing is saved yet*,
-- click **Aprobar** → the run resumes, the report becomes **Aprobado**,
+- a structured **report draft** appears in the **Report** tab (cover, executive
+  summary with risk level, findings with citations, warnings, recommendations,
+  sources annex),
+- an **"Approval required"** card — *nothing is saved yet*,
+- click **"Approve and save report"** → the run resumes, the report badge flips
+  to **Approved**,
 - the **mandatory non-editable disclaimer** in the footer.
 
 > "Side effects pass a **human-in-the-loop gate**. Approve, and only then does it
@@ -97,9 +102,9 @@ the file once and stores it in **OSS** (served from there on later downloads).
 
 ---
 
-### Scene 5 — Trazabilidad: the AgentOps debugger (2:20–2:45)
+### Scene 5 — Traceability: the AgentOps debugger (2:20–2:45)
 
-**Do:** click **Trazabilidad**.
+**Do:** click **Traceability**.
 
 **Show:** the append-only **ledger** replaying the whole run — `plan_created`,
 `task_routed`, `evidence_attached`, `task_done` — the after-the-fact trace that
