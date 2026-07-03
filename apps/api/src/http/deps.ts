@@ -25,8 +25,11 @@ import {
   CachedTranslator,
   NoopTranslator,
   QwenTranslator,
+  ResilientTranslator,
+  ThrottledTranslator,
   type Translator,
 } from '../services/translation/index.js';
+import { logger } from '../observability/logger.js';
 
 /** Everything the HTTP layer closes over. Built once at startup (or per test). */
 export interface AppDeps {
@@ -76,7 +79,12 @@ export async function buildDeps(env: Env = getEnv()): Promise<AppDeps> {
     const qwen = createQwenProvider(env);
     // Live translator: Qwen-backed, cached durably so a recurring passage costs
     // one model call. Powers cross-lingual retrieval + translated citations.
-    const translator: Translator = new CachedTranslator(new QwenTranslator(qwen), stores.documents);
+    // Throttled inside the cache (cache hits never wait); resilient outermost so
+    // a failed translation degrades to the source text instead of failing the run.
+    const translator: Translator = new ResilientTranslator(
+      new CachedTranslator(new ThrottledTranslator(new QwenTranslator(qwen)), stores.documents),
+      (err) => logger.warn({ err }, 'translation failed; using source text'),
+    );
     coordinator = createCoordinator({
       planner: createQwenPlanner(qwen),
       agents: createSpecialistAgents({ qwen, oefa, rag, reportStore, translator }),
